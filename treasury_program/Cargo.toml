@@ -1,0 +1,12 @@
+[package]
+name = "treasury_program"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+treasury_core = { path = "../treasury_core" }
+nssa_core = { git = "https://github.com/logos-blockchain/lssa.git" }
+token_core = { git = "https://github.com/logos-blockchain/lssa.git" }
+token_program = { git = "https://github.com/logos-blockchain/lssa.git" }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+borsh = "1.5.7"
