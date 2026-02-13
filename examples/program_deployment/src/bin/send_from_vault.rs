@@ -67,7 +67,7 @@ async fn main() {
         .expect("Failed to fetch nonce for signer account");
 
     // Get the signer's private key from the wallet storage
-    let signing_key = wallet_core.storage.user_data
+    let signing_key = wallet_core.storage().user_data
         .get_pub_account_signing_key(&signer_id)
         .expect("Signer private key not found in wallet — was this account created with `wallet account new public`?");
 
