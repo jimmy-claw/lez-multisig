@@ -1,7 +1,7 @@
 //! Treasury program
 
-use nssa_core::account::{AccountPostState, AccountWithMetadata};
-use nssa_core::program::{ProgramInput, ProgramOutput, read_nssa_inputs, write_nssa_outputs};
+use nssa_core::account::AccountWithMetadata;
+use nssa_core::program::AccountPostState;
 
 pub type Instruction = u8;
 
