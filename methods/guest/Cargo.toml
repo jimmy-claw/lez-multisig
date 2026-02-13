@@ -12,6 +12,6 @@ path = "src/bin/treasury.rs"
 [dependencies]
 treasury_core = { path = "../../treasury_core" }
 treasury_program = { path = "../../treasury_program" }
-nssa_core = { git = "https://github.com/logos-blockchain/lssa.git", branch = "schouhy/full-bedrock-integration" }
-risc0-zkvm = { version = "3.0.3", default-features = false }
-borsh = "1.5.7"
+nssa_core.workspace = true
+risc0-zkvm.workspace = true
+borsh.workspace = true
