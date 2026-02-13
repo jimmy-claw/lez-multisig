@@ -62,6 +62,12 @@ async fn main() {
     println!("Vault holding PDA:      {}", vault_holding_id);
 
     // Build the CreateVault instruction
+    let instruction = Instruction::CreateVault {
+        token_name: "TreasuryToken".to_string(),
+        initial_supply: 1_000_000,
+        token_program_id,
+    };
+
     // Serialize instruction to bytes, then convert to u32 words
     let instruction_bytes = borsh::to_vec(&instruction).unwrap();
     let instruction_data: Vec<u32> = instruction_bytes

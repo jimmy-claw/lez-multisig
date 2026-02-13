@@ -77,6 +77,11 @@ async fn main() {
     println!("Amount:                 {}", amount);
 
     // Build the Send instruction
+    let instruction = Instruction::Send {
+        amount,
+        token_program_id,
+    };
+
     // Serialize instruction to bytes, then convert to u32 words
     let instruction_bytes = borsh::to_vec(&instruction).unwrap();
     let instruction_data: Vec<u32> = instruction_bytes

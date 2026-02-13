@@ -18,4 +18,5 @@ nssa = { git = "https://github.com/logos-blockchain/lssa.git", branch = "schouhy
 wallet = { git = "https://github.com/logos-blockchain/lssa.git", branch = "schouhy/full-bedrock-integration" }
 risc0-zkvm = { version = "3.0.3", features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
+borsh = "1.5"
 tokio = { version = "1.28.2", features = ["net", "rt-multi-thread", "sync", "macros"] }
