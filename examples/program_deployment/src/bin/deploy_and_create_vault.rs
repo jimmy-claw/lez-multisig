@@ -68,6 +68,11 @@ async fn main() {
         token_program_id,
     };
 
+    // Build and submit the transaction
+    let account_ids = vec![treasury_state_id, token_def_id, vault_holding_id];
+    let nonces = vec![];
+    let signing_keys = [];
+
     // Message::try_new serializes automatically - don't convert to bytes!
     let message = Message::try_new(
         treasury_program_id,
