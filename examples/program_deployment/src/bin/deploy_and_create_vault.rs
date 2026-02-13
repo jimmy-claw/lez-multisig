@@ -87,12 +87,28 @@ async fn main() {
     let witness_set = WitnessSet::for_message(&message, &signing_keys);
     let tx = PublicTransaction::new(message, witness_set);
 
-    let _response = wallet_core
+    let response = wallet_core
         .sequencer_client
         .send_tx_public(tx)
         .await
         .unwrap();
 
-    println!("\n✅ CreateVault transaction submitted!");
+    println!("\n📤 CreateVault transaction submitted!");
     println!("   Token 'TRSY' with supply 1000000 minted into vault.");
+    println!("   tx_hash: {}", response.tx_hash);
+    println!("   Waiting for confirmation...");
+
+    let poller = wallet::poller::TxPoller::new(
+        wallet_core.config().clone(),
+        wallet_core.sequencer_client.clone(),
+    );
+
+    match poller.poll_tx(response.tx_hash).await {
+        Ok(_) => println!("✅ Transaction confirmed — included in a block."),
+        Err(e) => {
+            eprintln!("❌ Transaction NOT confirmed: {e:#}");
+            eprintln!("   It may have failed execution. Check sequencer logs for details.");
+            std::process::exit(1);
+        }
+    }
 }
