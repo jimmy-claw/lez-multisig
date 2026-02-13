@@ -10,9 +10,9 @@ use wallet::WalletCore;
 async fn main() {
     let wallet_core = WalletCore::from_env().unwrap();
 
-    // Args: <treasury.bin> <token.bin> <token_def_id> <recipient_id> <amount> <signer_id> <signer_private_key>
+    // Args: <treasury.bin> <token.bin> <token_def_id> <recipient_id> <amount> <signer_id>
     let treasury_path = std::env::args_os().nth(1)
-        .expect("Usage: send_from_vault <treasury.bin> <token.bin> <token_def_id> <recipient_id> <amount> <signer_id> <signer_private_key>")
+        .expect("Usage: send_from_vault <treasury.bin> <token.bin> <token_def_id> <recipient_id> <amount> <signer_id>")
         .into_string().unwrap();
     let token_path = std::env::args_os().nth(2)
         .expect("Missing <token.bin> path")
@@ -33,9 +33,6 @@ async fn main() {
         .expect("Missing <signer_account_id> — must be an authorized account from CreateVault")
         .into_string().unwrap()
         .parse().unwrap();
-    let signer_private_key = std::env::args_os().nth(7)
-        .expect("Missing <signer_private_key> — private key for the signer account")
-        .into_string().unwrap();
 
     // Load programs to get their IDs
     let treasury_bytecode: Vec<u8> = std::fs::read(&treasury_path).unwrap();
@@ -65,15 +62,14 @@ async fn main() {
     // Include signer_id as the 4th account — Send checks it's authorized
     let account_ids = vec![treasury_state_id, vault_holding_id, recipient_id, signer_id];
 
-    // Parse the signer's private key for signing
-    let signer_key_bytes: [u8; 32] = hex::decode(&signer_private_key)
-        .expect("Invalid hex for signer private key")
-        .try_into()
-        .expect("Private key must be 32 bytes");
-    let signing_keys = [signer_key_bytes];
+    // Fetch signer's current nonce from the sequencer
+    let nonces = wallet_core.get_accounts_nonces(vec![signer_id]).await
+        .expect("Failed to fetch nonce for signer account");
 
-    // Signer's nonce (need to match current on-chain nonce)
-    let nonces = vec![0u128]; // TODO: fetch actual nonce
+    // Get the signer's private key from the wallet storage
+    let signing_key = wallet_core.storage.user_data
+        .get_pub_account_signing_key(&signer_id)
+        .expect("Signer private key not found in wallet — was this account created with `wallet account new public`?");
 
     let message = Message::try_new(
         treasury_program_id,
@@ -81,7 +77,7 @@ async fn main() {
         nonces,
         instruction,
     ).unwrap();
-    let witness_set = WitnessSet::for_message(&message, &signing_keys);
+    let witness_set = WitnessSet::for_message(&message, &[signing_key]);
     let tx = PublicTransaction::new(message, witness_set);
 
     let _response = wallet_core
