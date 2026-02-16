@@ -5,16 +5,16 @@ use nssa::{
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
-use treasury_core::{Instruction, compute_multisig_state_pda, compute_treasury_state_pda, compute_vault_holding_pda};
+use treasury_core::{Instruction, compute_multisig_state_pda};
 use wallet::WalletCore;
 
-/// LSSA Treasury CLI — manage vaults and multisig wallets
+/// LSSA Multisig CLI — M-of-N threshold governance for LEZ
 #[derive(Parser)]
-#[command(name = "treasury", version, about, long_about = None)]
+#[command(name = "multisig", version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
-    /// Path to the treasury program binary
-    #[arg(long, short = 'p', env = "TREASURY_PROGRAM", default_value = "artifacts/treasury.bin")]
+    /// Path to the multisig program binary
+    #[arg(long, short = 'p', env = "MULTISIG_PROGRAM", default_value = "artifacts/multisig.bin")]
     program: String,
 
     #[command(subcommand)]
@@ -23,19 +23,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Deploy a new vault with token minting (legacy 1-of-N)
-    Deploy {
-        /// Path to token program binary
-        #[arg(long)]
-        token_program: String,
-        /// Token definition account ID
-        #[arg(long)]
-        token_def: String,
-        /// Authorized signer account IDs
-        #[arg(long, num_args = 1..)]
-        signer: Vec<String>,
-    },
-
     /// Create a new M-of-N multisig
     Create {
         /// Required signatures (M)
@@ -46,23 +33,7 @@ enum Commands {
         member: Vec<String>,
     },
 
-    /// Send tokens from a vault (legacy)
-    Send {
-        /// Signer account ID
-        #[arg(long)]
-        signer: String,
-        /// Destination account ID
-        #[arg(long)]
-        to: String,
-        /// Amount to send
-        #[arg(long)]
-        amount: u128,
-        /// Token program binary path
-        #[arg(long)]
-        token_program: String,
-    },
-
-    /// Execute a multisig transfer
+    /// Execute a multisig transfer (requires M signer signatures)
     Execute {
         /// Recipient account ID
         #[arg(long)]
@@ -75,28 +46,28 @@ enum Commands {
         signer: String,
     },
 
-    /// Add a member to the multisig
+    /// Add a member to the multisig (requires M signatures)
     AddMember {
         /// New member account ID
         #[arg(long)]
         member: String,
     },
 
-    /// Remove a member from the multisig
+    /// Remove a member from the multisig (requires M signatures)
     RemoveMember {
         /// Member account ID to remove
         #[arg(long)]
         member: String,
     },
 
-    /// Change the multisig threshold
+    /// Change the multisig threshold (requires M signatures)
     SetThreshold {
         /// New threshold value
         #[arg(long, short = 't')]
         threshold: u8,
     },
 
-    /// Show multisig/vault status
+    /// Show multisig status
     Status,
 
     /// Generate shell completions
@@ -150,7 +121,7 @@ async fn main() {
 
     // Handle completions early (no wallet/program needed)
     if let Commands::Completions { shell } = &cli.command {
-        generate(*shell, &mut Cli::command(), "treasury", &mut std::io::stdout());
+        generate(*shell, &mut Cli::command(), "multisig", &mut std::io::stdout());
         return;
     }
 
@@ -158,45 +129,6 @@ async fn main() {
     let (_, program_id) = load_program(&cli.program);
 
     match cli.command {
-        Commands::Deploy { token_program, token_def, signer } => {
-            let (_, token_program_id) = load_program(&token_program);
-            let token_def_id: AccountId = token_def.parse().unwrap();
-            let treasury_state_id = compute_treasury_state_pda(&program_id);
-            let vault_holding_id = compute_vault_holding_pda(&program_id, &token_def_id);
-
-            let signers: Vec<AccountId> = signer.iter()
-                .map(|s| s.parse().expect("Invalid signer ID"))
-                .collect();
-
-            println!("🏗️  Deploying vault");
-            println!("   Program:    {:?}", program_id);
-            println!("   State PDA:  {}", treasury_state_id);
-            println!("   Signers:    {}", signers.len());
-            for (i, s) in signers.iter().enumerate() {
-                println!("     [{}] {}", i, s);
-            }
-
-            let mut token_name = [0u8; 6];
-            token_name[..4].copy_from_slice(b"TRSY");
-
-            let instruction = Instruction::CreateVault {
-                token_name,
-                initial_supply: 1_000_000,
-                token_program_id,
-                authorized_accounts: signers.iter().map(|id| *id.value()).collect(),
-            };
-
-            let message = Message::try_new(
-                program_id,
-                vec![treasury_state_id, token_def_id, vault_holding_id],
-                vec![],
-                instruction,
-            ).unwrap();
-            let witness_set = WitnessSet::for_message(&message, &[] as &[&nssa::PrivateKey]);
-            let tx = PublicTransaction::new(message, witness_set);
-            submit_and_confirm(&wallet_core, tx, "Deploy vault").await;
-        }
-
         Commands::Create { threshold, member } => {
             let members: Vec<AccountId> = member.iter()
                 .map(|s| s.parse().expect("Invalid member ID"))
@@ -229,38 +161,6 @@ async fn main() {
             let witness_set = WitnessSet::for_message(&message, &[] as &[&nssa::PrivateKey]);
             let tx = PublicTransaction::new(message, witness_set);
             submit_and_confirm(&wallet_core, tx, "Create multisig").await;
-        }
-
-        Commands::Send { signer, to, amount, token_program } => {
-            let signer_id: AccountId = signer.parse().unwrap();
-            let (_, token_program_id) = load_program(&token_program);
-            let treasury_state_id = compute_treasury_state_pda(&program_id);
-            let to_id: AccountId = to.parse().unwrap();
-
-            println!("💸 Sending {} tokens", amount);
-            println!("   From vault → {}", to_id);
-            println!("   Signer: {}", signer_id);
-
-            let nonces = wallet_core.get_accounts_nonces(vec![signer_id.clone()]).await
-                .expect("Failed to get nonces");
-            let signing_key = wallet_core.storage().user_data
-                .get_pub_account_signing_key(&signer_id)
-                .expect("Signing key not found");
-
-            let instruction = Instruction::Send {
-                amount,
-                token_program_id,
-            };
-
-            let message = Message::try_new(
-                program_id,
-                vec![treasury_state_id, to_id],
-                nonces,
-                instruction,
-            ).unwrap();
-            let witness_set = WitnessSet::for_message(&message, &[signing_key]);
-            let tx = PublicTransaction::new(message, witness_set);
-            submit_and_confirm(&wallet_core, tx, "Send from vault").await;
         }
 
         Commands::Execute { to, amount, signer } => {
@@ -356,15 +256,13 @@ async fn main() {
             submit_and_confirm(&wallet_core, tx, "Set threshold").await;
         }
 
-        Commands::Completions { .. } => unreachable!(), // handled above
+        Commands::Completions { .. } => unreachable!(),
 
         Commands::Status => {
             let multisig_state_id = compute_multisig_state_pda(&program_id);
-            let treasury_state_id = compute_treasury_state_pda(&program_id);
-            println!("📊 Treasury Status");
+            println!("📊 Multisig Status");
             println!("   Program:        {:?}", program_id);
             println!("   Multisig PDA:   {}", multisig_state_id);
-            println!("   Vault PDA:      {}", treasury_state_id);
             println!();
             println!("   (On-chain state query not yet implemented — needs sequencer query API)");
         }

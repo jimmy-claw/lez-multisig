@@ -1,18 +1,10 @@
 [package]
-name = "treasury-examples"
+name = "multisig-cli"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "deploy_and_create_vault"
-path = "src/bin/deploy_and_create_vault.rs"
-
-[[bin]]
-name = "send_from_vault"
-path = "src/bin/send_from_vault.rs"
-
-[[bin]]
-name = "treasury"
+name = "multisig"
 path = "src/bin/treasury.rs"
 
 [dependencies]

@@ -1,6 +1,5 @@
 // CreateMultisig handler — initializes a new M-of-N multisig
 
-use borsh::BorshSerialize;
 use nssa_core::account::{Account, AccountWithMetadata};
 use nssa_core::program::{AccountPostState, ChainedCall};
 use treasury_core::MultisigState;

@@ -3166,6 +3166,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "multisig-cli"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "clap",
+ "clap_complete",
+ "nssa",
+ "nssa_core",
+ "risc0-zkvm",
+ "serde",
+ "tokio",
+ "treasury_core",
+ "wallet",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5174,22 +5190,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
 dependencies = [
  "tracing-core",
-]
-
-[[package]]
-name = "treasury-examples"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "clap",
- "clap_complete",
- "nssa",
- "nssa_core",
- "risc0-zkvm",
- "serde",
- "tokio",
- "treasury_core",
- "wallet",
 ]
 
 [[package]]

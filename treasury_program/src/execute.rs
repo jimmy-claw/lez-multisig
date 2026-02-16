@@ -1,6 +1,5 @@
 // Execute handler — executes a transaction when M-of-N threshold is met
 
-use borsh::BorshSerialize;
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall, ProgramId};
 use treasury_core::MultisigState;

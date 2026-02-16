@@ -1,6 +1,5 @@
 // AddMember handler — adds a new member (requires threshold signatures)
 
-use borsh::BorshSerialize;
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};
 use treasury_core::MultisigState;
