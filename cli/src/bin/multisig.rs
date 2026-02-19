@@ -1,7 +1,7 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use nssa::{
-    AccountId, PublicKey, PublicTransaction,
+    AccountId, PublicTransaction,
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
