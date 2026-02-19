@@ -46,7 +46,10 @@ pub fn handle(
     let state_bytes = borsh::to_vec(&state).unwrap();
     multisig_post.data = state_bytes.try_into().unwrap();
 
-    (vec![AccountPostState::new(multisig_post)], vec![])
+    // Must return post states for ALL input accounts (sequencer validates length match)
+    let proposer_post = proposer_account.account.clone();
+
+    (vec![AccountPostState::new(multisig_post), AccountPostState::new(proposer_post)], vec![])
 }
 
 #[cfg(test)]

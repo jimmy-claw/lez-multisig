@@ -96,7 +96,10 @@ pub fn handle(
     let state_bytes = borsh::to_vec(&state).unwrap();
     multisig_post.data = state_bytes.try_into().unwrap();
 
-    (vec![AccountPostState::new(multisig_post)], vec![])
+    // Must return post states for ALL input accounts
+    let executor_post = executor_account.account.clone();
+
+    (vec![AccountPostState::new(multisig_post), AccountPostState::new(executor_post)], vec![])
 }
 
 #[cfg(test)]
