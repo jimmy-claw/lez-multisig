@@ -1,14 +1,10 @@
-//! End-to-end tests for the multisig program.
-//!
-//! These tests deploy the multisig program to a local sequencer,
-//! create a multisig, and test the propose → sign → execute flow.
+//! End-to-end tests for the multisig program (Squads-style on-chain proposals).
 //!
 //! Prerequisites:
 //! - A running sequencer at SEQUENCER_URL (default http://127.0.0.1:3040)
-//! - Build the guest binary: `cargo risczero build --manifest-path methods/guest/Cargo.toml`
-//!   Or set `MULTISIG_PROGRAM` env var to the path of the compiled binary
+//! - MULTISIG_PROGRAM env var pointing to the compiled guest binary
 //!
-//! Run with: `cargo test -p lez-multisig-e2e --test e2e_multisig -- --nocapture`
+//! Run with: `cargo test -p lez-multisig-e2e --test e2e_multisig -- --nocapture --test-threads=1`
 
 use std::time::Duration;
 
@@ -17,22 +13,21 @@ use nssa::{
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
-use multisig_core::{Instruction, MultisigState, compute_multisig_state_pda};
+use multisig_core::{Instruction, MultisigState, ProposalAction, ProposalStatus, compute_multisig_state_pda};
 use common::sequencer_client::SequencerClient;
 
-/// Helper: derive AccountId from a PrivateKey
+const BLOCK_WAIT_SECS: u64 = 15;
+
 fn account_id_from_key(key: &PrivateKey) -> AccountId {
     let pk = PublicKey::new_from_private_key(key);
     AccountId::from(&pk)
 }
 
-/// Helper: load the multisig program binary
-fn load_program() -> Program {
+fn load_program_bytecode() -> Vec<u8> {
     let path = std::env::var("MULTISIG_PROGRAM")
         .unwrap_or_else(|_| "target/riscv32im-risc0-zkvm-elf/docker/multisig.bin".to_string());
-    let bytecode = std::fs::read(&path)
-        .unwrap_or_else(|_| panic!("Cannot read program binary at '{}'. Build with: cargo risczero build --manifest-path methods/guest/Cargo.toml", path));
-    Program::new(bytecode).expect("Invalid program bytecode")
+    std::fs::read(&path)
+        .unwrap_or_else(|_| panic!("Cannot read program binary at '{}'", path))
 }
 
 fn sequencer_client() -> SequencerClient {
@@ -41,181 +36,257 @@ fn sequencer_client() -> SequencerClient {
     SequencerClient::new(url.parse().unwrap()).expect("Failed to create sequencer client")
 }
 
-/// Helper: submit a public transaction and wait for confirmation
 async fn submit_tx(client: &SequencerClient, tx: PublicTransaction) {
     let response = client.send_tx_public(tx).await.expect("Failed to submit tx");
     println!("  tx_hash: {}", response.tx_hash);
-    // Wait for block creation
-    tokio::time::sleep(Duration::from_secs(15)).await;
+    tokio::time::sleep(Duration::from_secs(BLOCK_WAIT_SECS)).await;
 }
 
-/// Helper: get nonces for accounts
-async fn get_nonces(client: &SequencerClient, accounts: &[AccountId]) -> Vec<u128> {
-    let mut nonces = Vec::new();
-    for account_id in accounts {
-        let account = client.get_account(*account_id).await
-            .expect("Failed to get account");
-        nonces.push(account.account.nonce);
-    }
-    nonces
+/// Submit a single-signer transaction
+async fn submit_signed(
+    client: &SequencerClient,
+    program_id: nssa::ProgramId,
+    account_ids: Vec<AccountId>,
+    signer_key: &PrivateKey,
+    nonces: Vec<u128>,
+    instruction: Instruction,
+) {
+    let message = Message::try_new(program_id, account_ids, nonces, instruction).unwrap();
+    let witness_set = WitnessSet::for_message(&message, &[signer_key]);
+    let tx = PublicTransaction::new(message, witness_set);
+    submit_tx(client, tx).await;
 }
 
-/// Deploy the multisig program and return its ID
-async fn deploy_program(client: &SequencerClient) -> nssa::ProgramId {
-    let program = load_program();
+async fn get_nonce(client: &SequencerClient, account_id: AccountId) -> u128 {
+    client.get_account(account_id).await
+        .map(|r| r.account.nonce)
+        .unwrap_or(0)
+}
+
+async fn get_multisig_state(client: &SequencerClient, state_id: AccountId) -> MultisigState {
+    let account = client.get_account(state_id).await.expect("Failed to get multisig state");
+    borsh::from_slice(&account.account.data).expect("Failed to deserialize multisig state")
+}
+
+/// Deploy program and return its ID
+async fn deploy_and_get_id(client: &SequencerClient) -> nssa::ProgramId {
+    let bytecode = load_program_bytecode();
+    let program = Program::new(bytecode.clone()).expect("Invalid program");
     let program_id = program.id();
 
     println!("📦 Deploying multisig program...");
-    let bytecode = std::fs::read(&std::env::var("MULTISIG_PROGRAM")
-        .unwrap_or_else(|_| "target/riscv32im-risc0-zkvm-elf/docker/multisig.bin".to_string()))
-        .expect("Cannot read program binary");
     let deploy_msg = nssa::program_deployment_transaction::Message::new(bytecode);
     let deploy_tx = ProgramDeploymentTransaction::new(deploy_msg);
-    let response = client.send_tx_program(deploy_tx).await
-        .expect("Failed to deploy program");
+    let response = client.send_tx_program(deploy_tx).await.expect("Failed to deploy");
     println!("  deploy tx_hash: {}", response.tx_hash);
-    tokio::time::sleep(Duration::from_secs(15)).await;
+    tokio::time::sleep(Duration::from_secs(BLOCK_WAIT_SECS)).await;
 
     program_id
 }
 
 #[tokio::test]
-async fn test_create_multisig() {
+async fn test_create_and_query_multisig() {
     let client = sequencer_client();
-    let program_id = deploy_program(&client).await;
+    let program_id = deploy_and_get_id(&client).await;
+    let multisig_state_id = compute_multisig_state_pda(&program_id);
 
-    // Generate 3 member keys
     let key1 = PrivateKey::new_os_random();
     let key2 = PrivateKey::new_os_random();
     let key3 = PrivateKey::new_os_random();
-
-    let member1 = account_id_from_key(&key1);
-    let member2 = account_id_from_key(&key2);
-    let member3 = account_id_from_key(&key3);
-
-    let multisig_state_id = compute_multisig_state_pda(&program_id);
+    let m1 = account_id_from_key(&key1);
+    let m2 = account_id_from_key(&key2);
+    let m3 = account_id_from_key(&key3);
 
     println!("🔐 Creating 2-of-3 multisig...");
-    println!("  member1: {}", member1);
-    println!("  member2: {}", member2);
-    println!("  member3: {}", member3);
-    println!("  state PDA: {}", multisig_state_id);
-
     let instruction = Instruction::CreateMultisig {
         threshold: 2,
-        members: vec![
-            *member1.value(),
-            *member2.value(),
-            *member3.value(),
-        ],
+        members: vec![*m1.value(), *m2.value(), *m3.value()],
     };
-
-    let message = Message::try_new(
-        program_id,
-        vec![multisig_state_id],
-        vec![],
-        instruction,
-    ).unwrap();
+    let message = Message::try_new(program_id, vec![multisig_state_id], vec![], instruction).unwrap();
     let witness_set = WitnessSet::for_message(&message, &[] as &[&PrivateKey]);
-    let tx = PublicTransaction::new(message, witness_set);
-    submit_tx(&client, tx).await;
+    submit_tx(&client, PublicTransaction::new(message, witness_set)).await;
 
-    // Verify the multisig state was created
-    let account = client.get_account(multisig_state_id).await
-        .expect("Failed to get multisig state");
-    assert_eq!(account.account.program_owner, program_id, "Multisig state should be owned by the program");
-
-    // Deserialize and verify state
-    let state: MultisigState = borsh::from_slice(&account.account.data)
-        .expect("Failed to deserialize multisig state");
+    // Verify on-chain
+    let state = get_multisig_state(&client, multisig_state_id).await;
     assert_eq!(state.threshold, 2);
     assert_eq!(state.members.len(), 3);
-    assert!(state.members.contains(member1.value()));
-    assert!(state.members.contains(member2.value()));
-    assert!(state.members.contains(member3.value()));
-
-    println!("✅ Multisig created successfully!");
-    println!("  threshold: {}", state.threshold);
-    println!("  members: {}", state.members.len());
+    assert_eq!(state.transaction_index, 0);
+    assert!(state.proposals.is_empty());
+    println!("✅ Multisig created!");
 }
 
 #[tokio::test]
-async fn test_propose_sign_execute_transfer() {
+async fn test_propose_approve_execute_transfer() {
     let client = sequencer_client();
-    let program_id = deploy_program(&client).await;
+    let program_id = deploy_and_get_id(&client).await;
+    let multisig_state_id = compute_multisig_state_pda(&program_id);
 
-    // Generate keys
     let key1 = PrivateKey::new_os_random();
     let key2 = PrivateKey::new_os_random();
     let key3 = PrivateKey::new_os_random();
-
-    let member1 = account_id_from_key(&key1);
-    let member2 = account_id_from_key(&key2);
-    let member3 = account_id_from_key(&key3);
-
-    let multisig_state_id = compute_multisig_state_pda(&program_id);
+    let m1 = account_id_from_key(&key1);
+    let m2 = account_id_from_key(&key2);
+    let m3 = account_id_from_key(&key3);
+    let recipient = account_id_from_key(&PrivateKey::new_os_random());
 
     // Create 2-of-3 multisig
     println!("🔐 Creating 2-of-3 multisig...");
-    let create_instruction = Instruction::CreateMultisig {
+    let instruction = Instruction::CreateMultisig {
         threshold: 2,
-        members: vec![
-            *member1.value(),
-            *member2.value(),
-            *member3.value(),
-        ],
+        members: vec![*m1.value(), *m2.value(), *m3.value()],
     };
-
-    let message = Message::try_new(
-        program_id,
-        vec![multisig_state_id],
-        vec![],
-        create_instruction,
-    ).unwrap();
+    let message = Message::try_new(program_id, vec![multisig_state_id], vec![], instruction).unwrap();
     let witness_set = WitnessSet::for_message(&message, &[] as &[&PrivateKey]);
-    let tx = PublicTransaction::new(message, witness_set);
-    submit_tx(&client, tx).await;
+    submit_tx(&client, PublicTransaction::new(message, witness_set)).await;
 
-    // === Propose → Sign → Execute ===
-    let recipient = account_id_from_key(&PrivateKey::new_os_random());
+    // Step 1: Member 1 proposes a transfer
+    println!("📝 Member 1 proposing transfer...");
+    let nonce = get_nonce(&client, m1).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m1],
+        &key1, vec![nonce],
+        Instruction::Propose {
+            action: ProposalAction::Transfer { recipient, amount: 100 },
+        },
+    ).await;
 
-    println!("📝 Creating proposal for transfer to {}...", recipient);
+    // Verify proposal exists
+    let state = get_multisig_state(&client, multisig_state_id).await;
+    assert_eq!(state.proposals.len(), 1);
+    assert_eq!(state.proposals[0].index, 1);
+    assert_eq!(state.proposals[0].approved.len(), 1); // proposer auto-approved
+    assert_eq!(state.proposals[0].status, ProposalStatus::Active);
+    println!("  ✅ Proposal #1 created with 1 approval");
 
-    // Build the execute instruction
-    let execute_instruction = Instruction::Execute {
-        recipient,
-        amount: 100,
+    // Step 2: Member 2 approves
+    println!("👍 Member 2 approving...");
+    let nonce = get_nonce(&client, m2).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m2],
+        &key2, vec![nonce],
+        Instruction::Approve { proposal_index: 1 },
+    ).await;
+
+    let state = get_multisig_state(&client, multisig_state_id).await;
+    assert_eq!(state.proposals[0].approved.len(), 2); // now at threshold
+    println!("  ✅ Proposal #1 has 2 approvals (threshold reached!)");
+
+    // Step 3: Member 1 executes
+    println!("⚡ Member 1 executing...");
+    let nonce = get_nonce(&client, m1).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m1],
+        &key1, vec![nonce],
+        Instruction::Execute { proposal_index: 1 },
+    ).await;
+
+    let state = get_multisig_state(&client, multisig_state_id).await;
+    // Executed proposals get cleaned up
+    assert!(state.proposals.is_empty());
+    println!("✅ Full propose → approve → execute flow completed!");
+}
+
+#[tokio::test]
+async fn test_propose_reject() {
+    let client = sequencer_client();
+    let program_id = deploy_and_get_id(&client).await;
+    let multisig_state_id = compute_multisig_state_pda(&program_id);
+
+    let key1 = PrivateKey::new_os_random();
+    let key2 = PrivateKey::new_os_random();
+    let m1 = account_id_from_key(&key1);
+    let m2 = account_id_from_key(&key2);
+
+    // Create 2-of-2 multisig
+    println!("🔐 Creating 2-of-2 multisig...");
+    let instruction = Instruction::CreateMultisig {
+        threshold: 2,
+        members: vec![*m1.value(), *m2.value()],
     };
+    let message = Message::try_new(program_id, vec![multisig_state_id], vec![], instruction).unwrap();
+    let witness_set = WitnessSet::for_message(&message, &[] as &[&PrivateKey]);
+    submit_tx(&client, PublicTransaction::new(message, witness_set)).await;
 
-    // Signers: member1 and member2 (threshold = 2)
-    let signer_ids = vec![member1, member2];
-    let nonces = get_nonces(&client, &signer_ids).await;
+    // Member 1 proposes
+    println!("📝 Member 1 proposing...");
+    let nonce = get_nonce(&client, m1).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m1],
+        &key1, vec![nonce],
+        Instruction::Propose {
+            action: ProposalAction::Transfer {
+                recipient: account_id_from_key(&PrivateKey::new_os_random()),
+                amount: 100,
+            },
+        },
+    ).await;
 
-    // Build message with signers in account_ids
-    // account_ids: [multisig_state_id, member1, member2]
-    let message = Message::try_new(
-        program_id,
-        vec![multisig_state_id, member1, member2],
-        nonces,
-        execute_instruction,
-    ).unwrap();
+    // Member 2 rejects — in 2-of-2, one reject = dead proposal
+    println!("👎 Member 2 rejecting...");
+    let nonce = get_nonce(&client, m2).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m2],
+        &key2, vec![nonce],
+        Instruction::Reject { proposal_index: 1 },
+    ).await;
 
-    println!("✍️  Signing with member1 and member2...");
+    let state = get_multisig_state(&client, multisig_state_id).await;
+    let proposal = state.get_proposal(1).unwrap();
+    assert_eq!(proposal.status, ProposalStatus::Rejected);
+    println!("✅ Proposal correctly rejected!");
+}
 
-    // Each signer creates their own WitnessSet
-    let ws1 = WitnessSet::for_message(&message, &[&key1]);
-    let ws2 = WitnessSet::for_message(&message, &[&key2]);
+#[tokio::test]
+async fn test_propose_add_member() {
+    let client = sequencer_client();
+    let program_id = deploy_and_get_id(&client).await;
+    let multisig_state_id = compute_multisig_state_pda(&program_id);
 
-    // Combine signatures
-    let mut all_pairs = ws1.into_raw_parts();
-    all_pairs.extend(ws2.into_raw_parts());
-    let combined_witness = WitnessSet::from_raw_parts(all_pairs);
+    let key1 = PrivateKey::new_os_random();
+    let key2 = PrivateKey::new_os_random();
+    let m1 = account_id_from_key(&key1);
+    let m2 = account_id_from_key(&key2);
+    let new_member = account_id_from_key(&PrivateKey::new_os_random());
 
-    println!("📤 Executing proposal...");
-    let tx = PublicTransaction::new(message, combined_witness);
-    submit_tx(&client, tx).await;
+    // Create 1-of-2 multisig (so single approval suffices)
+    println!("🔐 Creating 1-of-2 multisig...");
+    let instruction = Instruction::CreateMultisig {
+        threshold: 1,
+        members: vec![*m1.value(), *m2.value()],
+    };
+    let message = Message::try_new(program_id, vec![multisig_state_id], vec![], instruction).unwrap();
+    let witness_set = WitnessSet::for_message(&message, &[] as &[&PrivateKey]);
+    submit_tx(&client, PublicTransaction::new(message, witness_set)).await;
 
-    println!("✅ Propose → Sign → Execute flow completed!");
-    // Note: The transfer itself may fail at the program level (vault has no balance),
-    // but the signing, authorization, and sequencer submission should succeed.
+    // Propose adding a member (auto-approves, threshold=1 so immediately ready)
+    println!("📝 Proposing add member...");
+    let nonce = get_nonce(&client, m1).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m1],
+        &key1, vec![nonce],
+        Instruction::Propose {
+            action: ProposalAction::AddMember { new_member: *new_member.value() },
+        },
+    ).await;
+
+    // Execute immediately (threshold already met by proposer)
+    println!("⚡ Executing add member...");
+    let nonce = get_nonce(&client, m1).await;
+    submit_signed(
+        &client, program_id,
+        vec![multisig_state_id, m1],
+        &key1, vec![nonce],
+        Instruction::Execute { proposal_index: 1 },
+    ).await;
+
+    let state = get_multisig_state(&client, multisig_state_id).await;
+    assert_eq!(state.members.len(), 3);
+    assert!(state.is_member(new_member.value()));
+    println!("✅ Member added!");
 }
