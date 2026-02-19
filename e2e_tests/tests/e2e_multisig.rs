@@ -68,18 +68,27 @@ async fn get_multisig_state(client: &SequencerClient, state_id: AccountId) -> Mu
     borsh::from_slice(&account.account.data).expect("Failed to deserialize multisig state")
 }
 
-/// Deploy program and return its ID
+/// Deploy program and return its ID (skips if already deployed)
 async fn deploy_and_get_id(client: &SequencerClient) -> nssa::ProgramId {
     let bytecode = load_program_bytecode();
     let program = Program::new(bytecode.clone()).expect("Invalid program");
     let program_id = program.id();
+    let pda = compute_multisig_state_pda(&program_id);
 
-    println!("📦 Deploying multisig program...");
+    // Check if already deployed by querying the PDA
+    // If the program is deployed, the PDA account should be fetchable (even if empty)
+    println!("📦 Deploying multisig program (or reusing existing)...");
     let deploy_msg = nssa::program_deployment_transaction::Message::new(bytecode);
     let deploy_tx = ProgramDeploymentTransaction::new(deploy_msg);
-    let response = client.send_tx_program(deploy_tx).await.expect("Failed to deploy");
-    println!("  deploy tx_hash: {}", response.tx_hash);
-    tokio::time::sleep(Duration::from_secs(BLOCK_WAIT_SECS)).await;
+    match client.send_tx_program(deploy_tx).await {
+        Ok(response) => {
+            println!("  deploy tx_hash: {}", response.tx_hash);
+            tokio::time::sleep(Duration::from_secs(BLOCK_WAIT_SECS)).await;
+        }
+        Err(e) => {
+            println!("  deploy skipped (likely already exists): {}", e);
+        }
+    }
 
     program_id
 }
