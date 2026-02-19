@@ -5,7 +5,7 @@ use nssa::{
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
-use treasury_core::{Instruction, compute_multisig_state_pda};
+use multisig_core::{Instruction, compute_multisig_state_pda};
 use wallet::WalletCore;
 
 /// LSSA Multisig CLI — M-of-N threshold governance for LEZ

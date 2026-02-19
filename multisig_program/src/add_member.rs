@@ -2,7 +2,7 @@
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};
-use treasury_core::MultisigState;
+use multisig_core::MultisigState;
 
 /// Handle AddMember instruction
 /// 

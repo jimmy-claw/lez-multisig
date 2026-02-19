@@ -6,7 +6,7 @@ pub mod change_threshold;
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};
-use treasury_core::Instruction;
+use multisig_core::Instruction;
 
 /// Main entry point called from the guest binary.
 pub fn process(

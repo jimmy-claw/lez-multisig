@@ -164,7 +164,7 @@ impl MultisigCommand {
 
 impl MultisigInfo {
     pub fn from_account_data(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        let state = treasury_core::MultisigState::try_from_slice(data)?;
+        let state = multisig_core::MultisigState::try_from_slice(data)?;
         Ok(MultisigInfo {
             account_id: String::new(), // Would be set by caller
             threshold: state.threshold,

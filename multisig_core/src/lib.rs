@@ -1,4 +1,4 @@
-// treasury_core — shared types and PDA derivation helpers for the Multisig program.
+// multisig_core — shared types and PDA derivation helpers for the Multisig program.
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nssa_core::account::AccountId;

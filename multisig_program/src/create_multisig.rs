@@ -2,13 +2,13 @@
 
 use nssa_core::account::{Account, AccountWithMetadata};
 use nssa_core::program::{AccountPostState, ChainedCall};
-use treasury_core::MultisigState;
+use multisig_core::MultisigState;
 
 /// Handle CreateMultisig instruction
 /// 
 /// Expected accounts:
 /// - accounts[0]: multisig_state (PDA, uninitialized) — will store threshold + members
-/// - accounts[1]: vault (PDA, uninitialized) — the treasury vault
+/// - accounts[1]: vault (PDA, uninitialized) — the multisig vault
 /// 
 /// Authorization: anyone can create a new multisig
 pub fn handle(

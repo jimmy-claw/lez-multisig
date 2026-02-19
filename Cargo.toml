@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "treasury_core",
-    "treasury_program",
+    "multisig_core",
+    "multisig_program",
     "methods",
     "methods/guest",
     "examples/program_deployment",

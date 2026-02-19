@@ -1,33 +1,36 @@
-# LSSA Multisig — M-of-N Threshold Treasury for LEZ
+# LEZ Multisig — M-of-N Threshold Signatures
 
-An M-of-N multisig program for the [Logos Execution Zone (LEZ)](https://github.com/logos-blockchain/lssa). Multiple signers must approve transfers before they execute — no single key can drain the treasury.
+An M-of-N multisig program for the [Logos Execution Zone (LEZ)](https://github.com/logos-blockchain/lssa). Multiple signers must approve transfers before they execute — no single key can drain the funds.
 
 📄 **[FURPS Specification](docs/FURPS.md)** — functional requirements, usability, reliability, performance, security constraints.
 
 ## How It Works
 
 - **Create** a multisig with N members and threshold M
-- **Execute** a transfer — requires M valid signer signatures in the transaction
+- **Propose** a transfer — creates a proposal that requires M approvals
+- **Sign** a proposal — each signer approves independently
+- **Execute** — once M signatures are collected, the transfer goes through
 - **Manage** members and threshold (add/remove members, change threshold) — also requires M signatures
 - State lives in a **PDA** (Program Derived Account) — only the multisig program controls it
 
 ## Project Structure
 
 ```
-lssa-treasury/
-├── treasury_core/           — shared types, instructions, PDA helpers
-├── treasury_program/        — on-chain handlers
+lez-multisig/
+├── multisig_core/           — shared types, instructions, PDA helpers
+├── multisig_program/        — on-chain handlers
 │   └── src/
 │       ├── create_multisig.rs
 │       ├── execute.rs
 │       ├── add_member.rs
 │       ├── remove_member.rs
 │       └── change_threshold.rs
+├── cli/                     — CLI module (imported by lez-wallet)
+│   └── multisig.rs          — clap subcommands for multisig ops
 ├── methods/                 — risc0 zkVM guest build
-│   └── guest/src/bin/treasury.rs
+│   └── guest/src/bin/multisig.rs
 ├── examples/
-│   └── program_deployment/
-│       └── src/bin/treasury.rs  — unified CLI
+│   └── program_deployment/  — standalone deployment CLI
 └── docs/
     └── FURPS.md             — requirements specification
 ```
@@ -44,13 +47,13 @@ lssa-treasury/
 
 ```bash
 # Check core logic
-cargo check -p treasury_core -p treasury_program
+cargo check -p multisig_core -p multisig_program
 
 # Build the zkVM guest (produces the on-chain binary)
 cargo risczero build --manifest-path methods/guest/Cargo.toml
 
-# Build the CLI
-cargo build --bin treasury -p program_deployment
+# Build the deployment CLI
+cargo build --bin multisig -p program_deployment
 ```
 
 ### Deploy
@@ -66,59 +69,34 @@ wallet deploy-program target/riscv32im-risc0-zkvm-elf/docker/treasury.bin
 
 ## CLI Usage
 
-The `treasury` binary is a single unified CLI for all multisig operations.
+The multisig CLI is designed as a subcommand module for `lez-wallet`:
 
 ```bash
-# Set program binary path (or use -p flag each time)
-export MULTISIG_PROGRAM=artifacts/multisig.bin
-```
+# Create a 2-of-3 multisig
+lez-wallet multisig create --threshold 2 --member <PK1> --member <PK2> --member <PK3>
 
-### Create a 2-of-3 multisig
+# View multisig info
+lez-wallet multisig info --account <MULTISIG_ID>
 
-```bash
-treasury create --threshold 2 --members <ALICE_ID> <BOB_ID> <CAROL_ID>
-```
+# Propose a transfer
+lez-wallet multisig propose --multisig <ID> --to <RECIPIENT> --amount 100
 
-### Check multisig status
+# Sign a proposal
+lez-wallet multisig sign --proposal <FILE> --output <SIGNED_FILE>
 
-```bash
-treasury status
-```
+# Execute (after M signatures collected)
+lez-wallet multisig execute --proposal <FILE>
 
-### Execute a transfer (needs M signers)
-
-```bash
-treasury execute --recipient <ACCOUNT_ID> --amount 1000 --signer <YOUR_ID>
-```
-
-Each signer submits the same `execute` command. Once M signatures are collected in the transaction, it goes through.
-
-### Manage members
-
-```bash
-# Add a member (requires M current signatures)
-treasury add-member --member <NEW_MEMBER_ID>
-
-# Remove a member (requires M current signatures)
-treasury remove-member --member <MEMBER_ID>
-
-# Change threshold
-treasury set-threshold --threshold 3
-```
-
-### Shell completions
-
-```bash
-# Generate completions for your shell
-treasury completions --shell bash > /etc/bash_completion.d/treasury
-treasury completions --shell zsh > ~/.zfunc/_treasury
-treasury completions --shell fish > ~/.config/fish/completions/treasury.fish
+# Manage members
+lez-wallet multisig add-member --multisig <ID> --member <NEW_PK>
+lez-wallet multisig remove-member --multisig <ID> --member <PK>
+lez-wallet multisig change-threshold --multisig <ID> --threshold 3
 ```
 
 ## Tests
 
 ```bash
-cargo test -p treasury_program
+cargo test -p multisig_program
 ```
 
 18 unit tests covering creation, execution, member management, threshold changes, and edge cases (duplicate members, threshold bounds, replay protection via nonce).
@@ -127,4 +105,3 @@ cargo test -p treasury_program
 
 - [LSSA Repository](https://github.com/logos-blockchain/lssa)
 - [FURPS Specification](docs/FURPS.md)
-- [Workshop Guide](WORKSHOP.md) *(on `bedrock-api` branch)*

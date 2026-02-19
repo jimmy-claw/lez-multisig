@@ -1,15 +1,15 @@
 [package]
-name = "treasury-guest"
+name = "multisig-guest"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "treasury"
-path = "src/bin/treasury.rs"
+name = "multisig"
+path = "src/bin/multisig.rs"
 
 [dependencies]
-treasury_core = { path = "../../treasury_core" }
-treasury_program = { path = "../../treasury_program" }
+multisig_core = { path = "../../multisig_core" }
+multisig_program = { path = "../../multisig_program" }
 nssa_core.workspace = true
 risc0-zkvm.workspace = true
 borsh.workspace = true

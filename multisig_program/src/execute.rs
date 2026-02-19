@@ -2,13 +2,13 @@
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall, ProgramId};
-use treasury_core::MultisigState;
+use multisig_core::MultisigState;
 
 /// Handle Execute instruction
 /// 
 /// Expected accounts:
 /// - accounts[0]: multisig_state (PDA) — contains threshold, members, nonce
-/// - accounts[1]: vault (PDA) — the treasury vault to transfer from
+/// - accounts[1]: vault (PDA) — the multisig vault to transfer from
 /// - accounts[2..]: authorized accounts — the signers (must have is_authorized = true)
 /// 
 /// Authorization: M distinct members must be authorized

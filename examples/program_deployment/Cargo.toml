@@ -5,12 +5,12 @@ edition = "2024"
 
 [[bin]]
 name = "multisig"
-path = "src/bin/treasury.rs"
+path = "src/bin/multisig.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-treasury_core = { path = "../../treasury_core" }
+multisig_core = { path = "../../multisig_core" }
 nssa_core = { git = "https://github.com/logos-blockchain/lssa.git", branch = "schouhy/full-bedrock-integration" }
 nssa = { git = "https://github.com/logos-blockchain/lssa.git", branch = "schouhy/full-bedrock-integration" }
 wallet = { git = "https://github.com/logos-blockchain/lssa.git", branch = "schouhy/full-bedrock-integration" }
