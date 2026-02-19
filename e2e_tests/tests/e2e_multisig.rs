@@ -15,7 +15,6 @@ use std::time::Duration;
 use nssa::{
     AccountId, PrivateKey, ProgramDeploymentTransaction, PublicKey, PublicTransaction,
     program::Program,
-    program_deployment_transaction,
     public_transaction::{Message, WitnessSet},
 };
 use multisig_core::{Instruction, MultisigState, compute_multisig_state_pda};
