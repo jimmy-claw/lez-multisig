@@ -1,215 +1,250 @@
-// Execute handler — executes a transaction when M-of-N threshold is met
+// Execute handler — executes a fully-approved proposal
+//
+// Expected accounts:
+// - accounts[0]: multisig_state (PDA) — stores proposals and state
+// - accounts[1]: executor account (must be authorized = is a signer, must be member)
+//
+// For Transfer actions, the vault balance is deducted from the multisig state account.
+// (In a full implementation, a chained call to the token program would handle the transfer.)
 
 use nssa_core::account::AccountWithMetadata;
-use nssa_core::program::{AccountPostState, ChainedCall, ProgramId};
-use multisig_core::MultisigState;
+use nssa_core::program::{AccountPostState, ChainedCall};
+use multisig_core::{MultisigState, ProposalAction, ProposalStatus};
 
-/// Handle Execute instruction
-/// 
-/// Expected accounts:
-/// - accounts[0]: multisig_state (PDA) — contains threshold, members, nonce
-/// - accounts[1]: vault (PDA) — the multisig vault to transfer from
-/// - accounts[2..]: authorized accounts — the signers (must have is_authorized = true)
-/// 
-/// Authorization: M distinct members must be authorized
 pub fn handle(
     accounts: &[AccountWithMetadata],
-    _recipient: &nssa_core::account::AccountId,
-    amount: u128,
+    proposal_index: u64,
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
-    // Parse accounts
-    assert!(accounts.len() >= 2, "Execute requires multisig_state and vault accounts");
-    
-    let multisig_account = &accounts[0];
-    let vault_account = &accounts[1];
-    
-    // Get authorized signers from accounts with is_authorized = true
-    let authorized_signers: Vec<[u8; 32]> = accounts[2..]
-        .iter()
-        .filter(|acc| acc.is_authorized)
-        .map(|acc| {
-            // AccountId is 32 bytes - extract the key bytes
-            let id_bytes: Vec<u8> = acc.account_id.value().clone().into();
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&id_bytes[..32]);
-            key
-        })
-        .collect();
-    
-    assert!(!authorized_signers.is_empty(), "No authorized signers");
-    
-    // Deserialize multisig state
-    let state_data: Vec<u8> = multisig_account.account.data.clone().into();
-    let state: MultisigState = borsh::from_slice(&state_data)
-        .expect("Failed to deserialize multisig state");
-    
-    // Check threshold
-    let valid_signers = state.count_valid_signers(&authorized_signers);
-    assert!(
-        valid_signers >= state.threshold as usize,
-        "Insufficient signatures: need {}, got {}",
-        state.threshold,
-        valid_signers
-    );
-    
-    // Check vault balance
-    assert!(
-        vault_account.account.balance >= amount,
-        "Insufficient balance: have {}, need {}",
-        vault_account.account.balance,
-        amount
-    );
-    
-    // Build post states
-    let mut post_states = Vec::new();
-    
-    // Update multisig state (increment nonce)
-    let mut new_state = state.clone();
-    new_state.nonce += 1;
-    
-    let mut multisig_post = multisig_account.account.clone();
-    let state_bytes = borsh::to_vec(&new_state).unwrap();
-    multisig_post.data = state_bytes.try_into().unwrap();
-    post_states.push(AccountPostState::new(multisig_post));
-    
-    // Update vault (decrease balance)
-    let mut vault_post = vault_account.account.clone();
-    vault_post.balance = vault_post.balance.saturating_sub(amount);
-    post_states.push(AccountPostState::new(vault_post));
-    
-    // Emit chained call to transfer (placeholder - would integrate with token program)
-    // Using zeroed program ID - real implementation would call token program
-    let zero_program_id = ProgramId::default();
-    let chained_calls = vec![ChainedCall {
-        program_id: zero_program_id,
-        instruction_data: vec![],
-        pre_states: vec![],
-        pda_seeds: vec![],
-    }];
+    assert!(accounts.len() >= 2, "Execute requires multisig_state + executor accounts");
 
-    (post_states, chained_calls)
+    let multisig_account = &accounts[0];
+    let executor_account = &accounts[1];
+
+    assert!(executor_account.is_authorized, "Executor must sign the transaction");
+
+    let state_data: Vec<u8> = multisig_account.account.data.clone().into();
+    let mut state: MultisigState = borsh::from_slice(&state_data)
+        .expect("Failed to deserialize multisig state");
+
+    let executor_id = *executor_account.account_id.value();
+    assert!(state.is_member(&executor_id), "Executor is not a multisig member");
+
+    // Find proposal and verify it's ready
+    let threshold = state.threshold;
+    let proposal = state.get_proposal_mut(proposal_index)
+        .expect("Proposal not found");
+
+    assert_eq!(proposal.status, ProposalStatus::Active, "Proposal is not active");
+    assert!(
+        proposal.has_threshold(threshold),
+        "Proposal does not have enough approvals: need {}, have {}",
+        threshold,
+        proposal.approved.len()
+    );
+
+    // Mark as executed
+    proposal.status = ProposalStatus::Executed;
+    let action = proposal.action.clone();
+
+    // Execute the action
+    let mut multisig_post = multisig_account.account.clone();
+
+    match &action {
+        ProposalAction::Transfer { recipient: _, amount } => {
+            // Deduct from vault (multisig state account balance for now)
+            assert!(
+                multisig_post.balance >= *amount,
+                "Insufficient vault balance: have {}, need {}",
+                multisig_post.balance,
+                amount
+            );
+            multisig_post.balance -= amount;
+            // TODO: chained call to transfer to recipient
+        }
+
+        ProposalAction::AddMember { new_member } => {
+            assert!(!state.is_member(new_member), "Already a member");
+            assert!(state.members.len() < 10, "Maximum 10 members");
+            state.members.push(*new_member);
+            state.member_count = state.members.len() as u8;
+        }
+
+        ProposalAction::RemoveMember { member_to_remove } => {
+            assert!(state.is_member(member_to_remove), "Not a member");
+            state.members.retain(|m| m != member_to_remove);
+            state.member_count = state.members.len() as u8;
+            assert!(
+                state.threshold as usize <= state.members.len(),
+                "Cannot remove member: would make threshold unreachable"
+            );
+        }
+
+        ProposalAction::ChangeThreshold { new_threshold } => {
+            assert!(*new_threshold >= 1, "Threshold must be at least 1");
+            assert!(
+                (*new_threshold as usize) <= state.members.len(),
+                "Threshold cannot exceed member count"
+            );
+            state.threshold = *new_threshold;
+        }
+    }
+
+    // Clean up executed/rejected proposals to save space
+    state.cleanup_proposals();
+
+    // Serialize updated state
+    let state_bytes = borsh::to_vec(&state).unwrap();
+    multisig_post.data = state_bytes.try_into().unwrap();
+
+    (vec![AccountPostState::new(multisig_post)], vec![])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use nssa_core::account::{Account, AccountId};
+    use multisig_core::ProposalAction;
 
-    fn make_account(id: &[u8; 32], balance: u128, data: Vec<u8>) -> AccountWithMetadata {
+    fn make_account(id: &[u8; 32], balance: u128, data: Vec<u8>, authorized: bool) -> AccountWithMetadata {
         let mut account = Account::default();
         account.balance = balance;
         account.data = data.try_into().unwrap();
         AccountWithMetadata {
             account_id: AccountId::new(*id),
             account,
-            is_authorized: false,
+            is_authorized: authorized,
         }
     }
 
-    fn make_multisig_state(threshold: u8, members: Vec<[u8; 32]>) -> Vec<u8> {
-        let state = MultisigState::new(threshold, members);
+    fn make_approved_transfer_state(threshold: u8, members: Vec<[u8; 32]>, approvers: &[[u8; 32]], amount: u128) -> Vec<u8> {
+        let mut state = MultisigState::new(threshold, members);
+        state.create_proposal(
+            ProposalAction::Transfer {
+                recipient: AccountId::new([99u8; 32]),
+                amount,
+            },
+            approvers[0],
+        );
+        // Additional approvals beyond the proposer
+        for approver in &approvers[1..] {
+            let proposal = state.get_proposal_mut(1).unwrap();
+            proposal.approve(*approver);
+        }
         borsh::to_vec(&state).unwrap()
     }
 
     #[test]
-    fn test_execute_1_of_1_threshold() {
-        let members = vec![[1u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
-        let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
-        ];
-        
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 100);
-        
-        assert_eq!(post_states.len(), 2);
-    }
-
-    #[test]
-    fn test_execute_nonce_increments() {
+    fn test_execute_transfer() {
         let members = vec![[1u8; 32], [2u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
+        let state_data = make_approved_transfer_state(2, members, &[[1u8; 32], [2u8; 32]], 100);
+
         let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
+            make_account(&[10u8; 32], 1000, state_data, false),
+            make_account(&[1u8; 32], 0, vec![], true),
         ];
-        
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 50);
-        
-        let state_data: Vec<u8> = post_states[0].account().data.clone().into();
-        let state: MultisigState = borsh::from_slice(&state_data).unwrap();
-        assert_eq!(state.nonce, 1);
+
+        let (post_states, _) = handle(&accounts, 1);
+
+        let post = &post_states[0].account();
+        assert_eq!(post.balance, 900); // 1000 - 100
+        let state: MultisigState = borsh::from_slice(&Vec::from(post.data.clone())).unwrap();
+        // Executed proposals get cleaned up
+        assert_eq!(state.proposals.len(), 0);
     }
 
     #[test]
-    fn test_execute_exact_threshold() {
-        // 2-of-3, exactly 2 signers
+    fn test_execute_add_member() {
+        let members = vec![[1u8; 32], [2u8; 32]];
+        let mut state = MultisigState::new(2, members);
+        state.create_proposal(
+            ProposalAction::AddMember { new_member: [3u8; 32] },
+            [1u8; 32],
+        );
+        state.get_proposal_mut(1).unwrap().approve([2u8; 32]);
+        let state_data = borsh::to_vec(&state).unwrap();
+
+        let accounts = vec![
+            make_account(&[10u8; 32], 0, state_data, false),
+            make_account(&[1u8; 32], 0, vec![], true),
+        ];
+
+        let (post_states, _) = handle(&accounts, 1);
+
+        let state: MultisigState = borsh::from_slice(&Vec::from(post_states[0].account().data.clone())).unwrap();
+        assert_eq!(state.members.len(), 3);
+        assert!(state.is_member(&[3u8; 32]));
+    }
+
+    #[test]
+    fn test_execute_change_threshold() {
         let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
-        let state_data = make_multisig_state(2, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        let mut acc2 = make_account(&[2u8; 32], 0, vec![]);
-        acc2.is_authorized = true;
-        
+        let mut state = MultisigState::new(2, members);
+        state.create_proposal(
+            ProposalAction::ChangeThreshold { new_threshold: 3 },
+            [1u8; 32],
+        );
+        state.get_proposal_mut(1).unwrap().approve([2u8; 32]);
+        let state_data = borsh::to_vec(&state).unwrap();
+
         let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
-            acc2,
+            make_account(&[10u8; 32], 0, state_data, false),
+            make_account(&[1u8; 32], 0, vec![], true),
         ];
-        
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 100);
-        
-        assert_eq!(post_states.len(), 2);
+
+        let (post_states, _) = handle(&accounts, 1);
+
+        let state: MultisigState = borsh::from_slice(&Vec::from(post_states[0].account().data.clone())).unwrap();
+        assert_eq!(state.threshold, 3);
     }
 
     #[test]
-    fn test_execute_zero_amount() {
-        let members = vec![[1u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
+    #[should_panic(expected = "does not have enough approvals")]
+    fn test_execute_insufficient_approvals() {
+        let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
+        let mut state = MultisigState::new(2, members);
+        state.create_proposal(
+            ProposalAction::Transfer {
+                recipient: AccountId::new([99u8; 32]),
+                amount: 100,
+            },
+            [1u8; 32],
+        );
+        // Only 1 approval (proposer), need 2
+        let state_data = borsh::to_vec(&state).unwrap();
+
         let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
+            make_account(&[10u8; 32], 1000, state_data, false),
+            make_account(&[1u8; 32], 0, vec![], true),
         ];
-        
-        // Zero amount should work (just increments nonce)
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 0);
-        
-        assert_eq!(post_states.len(), 2);
+
+        handle(&accounts, 1);
     }
 
     #[test]
-    #[should_panic(expected = "No authorized signers")]
-    fn test_execute_missing_vault() {
-        let members = vec![[1u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
-        // Only 1 account (missing vault) - but we have authorized signer
-        // Actually fails at "No authorized signers" before vault check
+    #[should_panic(expected = "Insufficient vault balance")]
+    fn test_execute_insufficient_balance() {
+        let members = vec![[1u8; 32], [2u8; 32]];
+        let state_data = make_approved_transfer_state(2, members, &[[1u8; 32], [2u8; 32]], 1000);
+
         let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            acc1,
+            make_account(&[10u8; 32], 100, state_data, false), // only 100 balance
+            make_account(&[1u8; 32], 0, vec![], true),
         ];
-        
-        handle(&accounts, &AccountId::default(), 100);
+
+        handle(&accounts, 1);
+    }
+
+    #[test]
+    fn test_execute_1_of_1() {
+        let members = vec![[1u8; 32]];
+        let state_data = make_approved_transfer_state(1, members, &[[1u8; 32]], 50);
+
+        let accounts = vec![
+            make_account(&[10u8; 32], 500, state_data, false),
+            make_account(&[1u8; 32], 0, vec![], true),
+        ];
+
+        let (post_states, _) = handle(&accounts, 1);
+        assert_eq!(post_states[0].account().balance, 450);
     }
 }

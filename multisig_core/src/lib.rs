@@ -1,4 +1,7 @@
 // multisig_core — shared types and PDA derivation helpers for the Multisig program.
+//
+// Inspired by Squads Protocol v4 (Solana) — proposals are stored on-chain,
+// any member can propose/approve/execute independently.
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nssa_core::account::AccountId;
@@ -9,38 +12,147 @@ use serde::{Deserialize, Serialize};
 // Instructions
 // ---------------------------------------------------------------------------
 
-/// Instructions for the M-of-N multisig program
+/// Instructions for the M-of-N multisig program.
+///
+/// Flow (Squads-style):
+/// 1. Any member calls `Propose` with an action — creates on-chain proposal
+/// 2. Other members call `Approve { proposal_index }` — adds their approval
+/// 3. Once M approvals collected, anyone calls `Execute { proposal_index }`
+/// 4. Members can also `Reject` proposals
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Instruction {
     /// Create a new multisig with M-of-N threshold
     CreateMultisig {
         /// Required signatures for execution (M)
         threshold: u8,
-        /// List of member public keys (32 bytes each)
+        /// List of member account IDs (32 bytes each, derived from public keys)
         members: Vec<[u8; 32]>,
     },
-    /// Execute a transfer from the multisig (requires M signatures)
+
+    /// Create a new proposal (any member can propose)
+    Propose {
+        /// The action to execute once approved
+        action: ProposalAction,
+    },
+
+    /// Approve an existing proposal (any member, one approval per member)
+    Approve {
+        /// Index of the proposal to approve
+        proposal_index: u64,
+    },
+
+    /// Reject a proposal
+    Reject {
+        /// Index of the proposal to reject
+        proposal_index: u64,
+    },
+
+    /// Execute a fully-approved proposal
     Execute {
-        /// Recipient account ID
+        /// Index of the proposal to execute
+        proposal_index: u64,
+    },
+}
+
+/// Actions that can be proposed for multisig approval.
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq)]
+pub enum ProposalAction {
+    /// Transfer funds from the multisig vault
+    Transfer {
         recipient: AccountId,
-        /// Amount to transfer
         amount: u128,
     },
-    /// Add a new member (requires M current signatures)
+    /// Add a new member
     AddMember {
-        /// New member's public key
         new_member: [u8; 32],
     },
-    /// Remove a member (requires M current signatures)
+    /// Remove a member
     RemoveMember {
-        /// Member to remove
         member_to_remove: [u8; 32],
     },
-    /// Change the threshold (requires M current signatures)
+    /// Change the threshold
     ChangeThreshold {
-        /// New threshold value
         new_threshold: u8,
     },
+}
+
+// ---------------------------------------------------------------------------
+// Proposal state (stored on-chain in MultisigState)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub enum ProposalStatus {
+    /// Proposal is active and accepting approvals
+    Active,
+    /// Proposal has reached threshold and been executed
+    Executed,
+    /// Proposal was rejected (N - M + 1 rejections = can never reach threshold)
+    Rejected,
+    /// Proposal was cancelled
+    Cancelled,
+}
+
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct Proposal {
+    /// Unique index
+    pub index: u64,
+    /// The proposed action
+    pub action: ProposalAction,
+    /// Who proposed it
+    pub proposer: [u8; 32],
+    /// Account IDs that have approved (proposer auto-approves)
+    pub approved: Vec<[u8; 32]>,
+    /// Account IDs that have rejected
+    pub rejected: Vec<[u8; 32]>,
+    /// Current status
+    pub status: ProposalStatus,
+}
+
+impl Proposal {
+    pub fn new(index: u64, action: ProposalAction, proposer: [u8; 32]) -> Self {
+        Self {
+            index,
+            action,
+            proposer,
+            approved: vec![proposer], // proposer auto-approves
+            rejected: vec![],
+            status: ProposalStatus::Active,
+        }
+    }
+
+    /// Add an approval. Returns true if this was a new approval.
+    pub fn approve(&mut self, member: [u8; 32]) -> bool {
+        if self.approved.contains(&member) {
+            return false; // already approved
+        }
+        // Remove from rejected if previously rejected
+        self.rejected.retain(|r| r != &member);
+        self.approved.push(member);
+        true
+    }
+
+    /// Add a rejection. Returns true if this was a new rejection.
+    pub fn reject(&mut self, member: [u8; 32]) -> bool {
+        if self.rejected.contains(&member) {
+            return false; // already rejected
+        }
+        // Remove from approved if previously approved
+        self.approved.retain(|a| a != &member);
+        self.rejected.push(member);
+        true
+    }
+
+    /// Check if the proposal has enough approvals
+    pub fn has_threshold(&self, threshold: u8) -> bool {
+        self.approved.len() >= threshold as usize
+    }
+
+    /// Check if the proposal can never reach threshold
+    /// (when rejections >= N - M + 1, i.e., not enough remaining members to approve)
+    pub fn is_dead(&self, threshold: u8, member_count: u8) -> bool {
+        let remaining = member_count as usize - self.rejected.len();
+        remaining < threshold as usize
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -53,10 +165,12 @@ pub struct MultisigState {
     pub threshold: u8,
     /// Number of members (N)
     pub member_count: u8,
-    /// List of member public keys
+    /// List of member account IDs (derived from public keys)
     pub members: Vec<[u8; 32]>,
-    /// Nonce for replay protection
-    pub nonce: u64,
+    /// Transaction/proposal counter
+    pub transaction_index: u64,
+    /// Active and recent proposals
+    pub proposals: Vec<Proposal>,
 }
 
 impl MultisigState {
@@ -67,13 +181,14 @@ impl MultisigState {
             threshold,
             member_count,
             members,
-            nonce: 0,
+            transaction_index: 0,
+            proposals: vec![],
         }
     }
 
-    /// Check if a public key is a member
-    pub fn is_member(&self, pk: &[u8; 32]) -> bool {
-        self.members.contains(pk)
+    /// Check if an account ID is a member
+    pub fn is_member(&self, id: &[u8; 32]) -> bool {
+        self.members.contains(id)
     }
 
     /// Count how many of the given signers are members
@@ -82,6 +197,30 @@ impl MultisigState {
             .iter()
             .filter(|s| self.is_member(s))
             .count()
+    }
+
+    /// Get a mutable reference to a proposal by index
+    pub fn get_proposal_mut(&mut self, index: u64) -> Option<&mut Proposal> {
+        self.proposals.iter_mut().find(|p| p.index == index)
+    }
+
+    /// Get a proposal by index
+    pub fn get_proposal(&self, index: u64) -> Option<&Proposal> {
+        self.proposals.iter().find(|p| p.index == index)
+    }
+
+    /// Create a new proposal, returns the proposal index
+    pub fn create_proposal(&mut self, action: ProposalAction, proposer: [u8; 32]) -> u64 {
+        self.transaction_index += 1;
+        let index = self.transaction_index;
+        let proposal = Proposal::new(index, action, proposer);
+        self.proposals.push(proposal);
+        index
+    }
+
+    /// Clean up executed/rejected/cancelled proposals to save space
+    pub fn cleanup_proposals(&mut self) {
+        self.proposals.retain(|p| p.status == ProposalStatus::Active);
     }
 }
 
