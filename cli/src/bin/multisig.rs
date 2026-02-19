@@ -5,13 +5,13 @@ use nssa::{
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
-use multisig_core::{Instruction, compute_multisig_state_pda};
+use multisig_core::{Instruction, ProposalAction, compute_multisig_state_pda};
 use wallet::WalletCore;
 
-mod proposal;
-use proposal::Proposal;
-
 /// LSSA Multisig CLI — M-of-N threshold governance for LEZ
+///
+/// Squads-style on-chain proposal flow:
+///   propose → approve (by M members) → execute
 #[derive(Parser)]
 #[command(name = "multisig", version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -26,7 +26,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new M-of-N multisig (submitted directly, no proposal needed)
+    /// Create a new M-of-N multisig
     Create {
         /// Required signatures (M)
         #[arg(long, short = 't')]
@@ -36,43 +36,44 @@ enum Commands {
         member: Vec<String>,
     },
 
-    /// Create a proposal for a multisig action (transfer, add/remove member, etc.)
+    /// Create a proposal for a multisig action
     Propose {
-        /// Output file for the proposal
-        #[arg(long, short = 'o', default_value = "proposal.json")]
-        output: String,
-
-        /// Signer account IDs that will sign this proposal (base58, one per --signer)
-        #[arg(long, short = 's', num_args = 1..)]
-        signer: Vec<String>,
+        /// Your account ID (base58, must be a member)
+        #[arg(long)]
+        account: String,
 
         #[command(subcommand)]
         action: ProposeAction,
     },
 
-    /// Sign a proposal with your local key
-    Sign {
-        /// Path to the proposal file
-        #[arg(long, short = 'f', default_value = "proposal.json")]
-        file: String,
-
-        /// Your account ID (base58)
+    /// Approve a proposal
+    Approve {
+        /// Proposal index
+        #[arg(long, short = 'i')]
+        index: u64,
+        /// Your account ID (base58, must be a member)
         #[arg(long)]
         account: String,
     },
 
-    /// Execute a signed proposal (submit to sequencer)
-    Execute {
-        /// Path to the signed proposal file
-        #[arg(long, short = 'f', default_value = "proposal.json")]
-        file: String,
+    /// Reject a proposal
+    Reject {
+        /// Proposal index
+        #[arg(long, short = 'i')]
+        index: u64,
+        /// Your account ID (base58, must be a member)
+        #[arg(long)]
+        account: String,
     },
 
-    /// Show proposal info
-    Inspect {
-        /// Path to the proposal file
-        #[arg(long, short = 'f', default_value = "proposal.json")]
-        file: String,
+    /// Execute a fully-approved proposal
+    Execute {
+        /// Proposal index
+        #[arg(long, short = 'i')]
+        index: u64,
+        /// Your account ID (base58, must be a member)
+        #[arg(long)]
+        account: String,
     },
 
     /// Show multisig status
@@ -131,19 +132,13 @@ fn load_program(path: &str) -> (Program, nssa::ProgramId) {
     let program = Program::new(bytecode)
         .unwrap_or_else(|e| {
             eprintln!("Error: Invalid program bytecode at '{}': {:?}", path, e);
-            eprintln!("  The file exists but isn't a valid risc0 ELF binary.");
-            eprintln!("  Rebuild with:  cargo risczero build --manifest-path methods/guest/Cargo.toml");
             std::process::exit(1);
         });
     let id = program.id();
     (program, id)
 }
 
-async fn submit_and_confirm(
-    wallet_core: &WalletCore,
-    tx: PublicTransaction,
-    label: &str,
-) {
+async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, label: &str) {
     let response = wallet_core
         .sequencer_client
         .send_tx_public(tx)
@@ -168,11 +163,43 @@ async fn submit_and_confirm(
     }
 }
 
+/// Build and submit a single-signer transaction
+async fn submit_signed_tx(
+    wallet_core: &WalletCore,
+    program_id: nssa::ProgramId,
+    account_ids: Vec<AccountId>,
+    signer_id: AccountId,
+    instruction: Instruction,
+    label: &str,
+) {
+    let nonces = wallet_core
+        .get_accounts_nonces(vec![signer_id])
+        .await
+        .expect("Failed to get nonces");
+
+    let signing_key = wallet_core
+        .storage()
+        .user_data
+        .get_pub_account_signing_key(signer_id)
+        .expect("Signing key not found — is this account in your wallet?");
+
+    let message = Message::try_new(
+        program_id,
+        account_ids,
+        nonces,
+        instruction,
+    ).unwrap();
+
+    let witness_set = WitnessSet::for_message(&message, &[signing_key]);
+    let tx = PublicTransaction::new(message, witness_set);
+    submit_and_confirm(wallet_core, tx, label).await;
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
-    // Handle commands that don't need wallet/program
+    // Commands that don't need wallet/program
     match &cli.command {
         Commands::Completions { shell } => {
             generate(*shell, &mut Cli::command(), "multisig", &mut std::io::stdout());
@@ -189,29 +216,9 @@ async fn main() {
                     println!("   Multisig PDA:   {}", multisig_state_id);
                 }
             } else {
-                println!("   Program binary: not found (build with `cargo risczero build`)");
+                println!("   Program binary: not found");
             }
-            println!();
-            println!("   (On-chain state query not yet implemented — needs sequencer query API)");
-            return;
-        }
-        Commands::Inspect { file } => {
-            let proposal = Proposal::load(file).unwrap_or_else(|e| {
-                eprintln!("Error loading proposal '{}': {}", file, e);
-                std::process::exit(1);
-            });
-
-            println!("📋 Proposal: {}", proposal.description);
-            println!("   Signatures: {}", proposal.signature_count());
-            for (i, sig) in proposal.signatures.iter().enumerate() {
-                println!("   [{}] {}", i, sig.account_id);
-            }
-
-            // Verify signatures
-            match proposal.verify_signatures() {
-                Ok(()) => println!("   ✅ All signatures valid"),
-                Err(e) => println!("   ❌ {}", e),
-            }
+            println!("   (On-chain state query not yet implemented)");
             return;
         }
         _ => {}
@@ -219,9 +226,10 @@ async fn main() {
 
     let wallet_core = WalletCore::from_env().unwrap();
     let (_, program_id) = load_program(&cli.program);
+    let multisig_state_id = compute_multisig_state_pda(&program_id);
 
     match cli.command {
-        // ── Create (direct submit, no proposal needed) ──────────────────
+        // ── Create ──────────────────────────────────────────────────────
         Commands::Create { threshold, member } => {
             let members: Vec<AccountId> = member.iter()
                 .map(|s| s.parse().expect("Invalid member ID"))
@@ -232,13 +240,8 @@ async fn main() {
                 std::process::exit(1);
             }
 
-            let multisig_state_id = compute_multisig_state_pda(&program_id);
-
             println!("🔐 Creating {}-of-{} multisig", threshold, members.len());
             println!("   State PDA:  {}", multisig_state_id);
-            for (i, m) in members.iter().enumerate() {
-                println!("   Member [{}]: {}", i, m);
-            }
 
             let instruction = Instruction::CreateMultisig {
                 threshold,
@@ -256,161 +259,82 @@ async fn main() {
             submit_and_confirm(&wallet_core, tx, "Create multisig").await;
         }
 
-        // ── Propose (create proposal file for offline signing) ──────────
-        Commands::Propose { output, signer, action } => {
-            let multisig_state_id = compute_multisig_state_pda(&program_id);
+        // ── Propose ─────────────────────────────────────────────────────
+        Commands::Propose { account, action } => {
+            let account_id: AccountId = account.parse().expect("Invalid account ID");
 
-            // Parse signer account IDs
-            let signer_ids: Vec<AccountId> = signer.iter()
-                .map(|s| s.parse().expect("Invalid signer account ID"))
-                .collect();
-
-            if signer_ids.is_empty() {
-                eprintln!("Error: at least one --signer required");
-                std::process::exit(1);
-            }
-
-            // Build the instruction and description
-            let (instruction, description) = match &action {
+            let proposal_action = match &action {
                 ProposeAction::Transfer { to, amount } => {
                     let to_id: AccountId = to.parse().expect("Invalid recipient ID");
-                    (
-                        Instruction::Execute { recipient: to_id, amount: *amount },
-                        format!("Transfer {} to {}", amount, to),
-                    )
+                    ProposalAction::Transfer { recipient: to_id, amount: *amount }
                 }
                 ProposeAction::AddMember { member } => {
                     let member_id: AccountId = member.parse().expect("Invalid member ID");
-                    (
-                        Instruction::AddMember { new_member: *member_id.value() },
-                        format!("Add member {}", member),
-                    )
+                    ProposalAction::AddMember { new_member: *member_id.value() }
                 }
                 ProposeAction::RemoveMember { member } => {
                     let member_id: AccountId = member.parse().expect("Invalid member ID");
-                    (
-                        Instruction::RemoveMember { member_to_remove: *member_id.value() },
-                        format!("Remove member {}", member),
-                    )
+                    ProposalAction::RemoveMember { member_to_remove: *member_id.value() }
                 }
                 ProposeAction::SetThreshold { threshold } => {
-                    (
-                        Instruction::ChangeThreshold { new_threshold: *threshold },
-                        format!("Change threshold to {}", threshold),
-                    )
+                    ProposalAction::ChangeThreshold { new_threshold: *threshold }
                 }
             };
 
-            // Build account list:
-            // [0] = multisig state PDA
-            // [1..] = signer accounts (so they get is_authorized = true)
-            let mut account_ids = vec![multisig_state_id];
-            account_ids.extend(signer_ids.iter().cloned());
+            let instruction = Instruction::Propose { action: proposal_action };
 
-            // Fetch nonces for signer accounts
-            let nonces = wallet_core
-                .get_accounts_nonces(signer_ids.clone())
-                .await
-                .expect("Failed to get nonces from sequencer");
-
-            let message = Message::try_new(
-                program_id,
-                account_ids,
-                nonces,
+            println!("📝 Creating proposal...");
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id],
+                account_id,
                 instruction,
-            ).unwrap();
-
-            let proposal = Proposal::new(&message, description.clone());
-            proposal.save(&output).unwrap_or_else(|e| {
-                eprintln!("Error saving proposal: {}", e);
-                std::process::exit(1);
-            });
-
-            println!("📝 Proposal created: {}", description);
-            println!("   Saved to: {}", output);
-            println!("   Signers needed: {}", signer_ids.len());
-            for (i, s) in signer_ids.iter().enumerate() {
-                println!("   [{}] {}", i, s);
-            }
-            println!();
-            println!("   Next: each signer runs:");
-            println!("     multisig sign --file {} --account <THEIR_ACCOUNT_ID>", output);
+                "Propose",
+            ).await;
         }
 
-        // ── Sign (add your signature to a proposal) ─────────────────────
-        Commands::Sign { file, account } => {
+        // ── Approve ─────────────────────────────────────────────────────
+        Commands::Approve { index, account } => {
             let account_id: AccountId = account.parse().expect("Invalid account ID");
 
-            let mut proposal = Proposal::load(&file).unwrap_or_else(|e| {
-                eprintln!("Error loading proposal '{}': {}", file, e);
-                std::process::exit(1);
-            });
-
-            // Get signing key from wallet
-            let signing_key = wallet_core
-                .storage()
-                .user_data
-                .get_pub_account_signing_key(account_id)
-                .expect("Signing key not found for this account — is it in your wallet?");
-
-            // Sign the message
-            let message = proposal.message();
-            let witness = WitnessSet::for_message(&message, &[signing_key]);
-            let (signature, public_key) = witness
-                .into_raw_parts()
-                .into_iter()
-                .next()
-                .expect("WitnessSet should contain exactly one signature");
-
-            // Verify the public key maps to the claimed account ID
-            let derived_account_id = AccountId::from(&public_key);
-            if derived_account_id != account_id {
-                eprintln!("Error: signing key for {} produces account ID {}", account_id, derived_account_id);
-                eprintln!("  The account ID doesn't match. Wrong key?");
-                std::process::exit(1);
-            }
-
-            proposal.add_signature(&account_id, &public_key, &signature);
-            proposal.save(&file).unwrap_or_else(|e| {
-                eprintln!("Error saving proposal: {}", e);
-                std::process::exit(1);
-            });
-
-            println!("✍️  Signed proposal: {}", proposal.description);
-            println!("   Signer: {}", account_id);
-            println!("   Total signatures: {}", proposal.signature_count());
-            println!("   Saved to: {}", file);
+            println!("👍 Approving proposal #{}...", index);
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id],
+                account_id,
+                Instruction::Approve { proposal_index: index },
+                "Approve",
+            ).await;
         }
 
-        // ── Execute (submit a fully-signed proposal) ────────────────────
-        Commands::Execute { file } => {
-            let proposal = Proposal::load(&file).unwrap_or_else(|e| {
-                eprintln!("Error loading proposal '{}': {}", file, e);
-                std::process::exit(1);
-            });
+        // ── Reject ──────────────────────────────────────────────────────
+        Commands::Reject { index, account } => {
+            let account_id: AccountId = account.parse().expect("Invalid account ID");
 
-            if proposal.signature_count() == 0 {
-                eprintln!("Error: proposal has no signatures");
-                std::process::exit(1);
-            }
-
-            // Verify all signatures
-            proposal.verify_signatures().unwrap_or_else(|e| {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            });
-
-            println!("📤 Executing proposal: {}", proposal.description);
-            println!("   Signatures: {}", proposal.signature_count());
-
-            // Reconstruct the message and witness set
-            let message = proposal.message();
-            let witness_set = proposal.witness_set();
-
-            let tx = PublicTransaction::new(message, witness_set);
-            submit_and_confirm(&wallet_core, tx, "Multisig proposal").await;
+            println!("👎 Rejecting proposal #{}...", index);
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id],
+                account_id,
+                Instruction::Reject { proposal_index: index },
+                "Reject",
+            ).await;
         }
 
-        Commands::Completions { .. } | Commands::Status | Commands::Inspect { .. } => unreachable!(),
+        // ── Execute ─────────────────────────────────────────────────────
+        Commands::Execute { index, account } => {
+            let account_id: AccountId = account.parse().expect("Invalid account ID");
+
+            println!("⚡ Executing proposal #{}...", index);
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id],
+                account_id,
+                Instruction::Execute { proposal_index: index },
+                "Execute",
+            ).await;
+        }
+
+        Commands::Completions { .. } | Commands::Status => unreachable!(),
     }
 }
