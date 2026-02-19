@@ -80,8 +80,19 @@ enum Commands {
 
 fn load_program(path: &str) -> (Program, nssa::ProgramId) {
     let bytecode = std::fs::read(path)
-        .unwrap_or_else(|e| panic!("Failed to read program at {}: {}", path, e));
-    let program = Program::new(bytecode).unwrap();
+        .unwrap_or_else(|e| {
+            eprintln!("Error: Cannot read program binary at '{}': {}", path, e);
+            eprintln!("  Build it first:  cargo risczero build --manifest-path methods/guest/Cargo.toml");
+            eprintln!("  Or set path:     --program <path> or MULTISIG_PROGRAM=<path>");
+            std::process::exit(1);
+        });
+    let program = Program::new(bytecode)
+        .unwrap_or_else(|e| {
+            eprintln!("Error: Invalid program bytecode at '{}': {:?}", path, e);
+            eprintln!("  The file exists but isn't a valid risc0 ELF binary.");
+            eprintln!("  Rebuild with:  cargo risczero build --manifest-path methods/guest/Cargo.toml");
+            std::process::exit(1);
+        });
     let id = program.id();
     (program, id)
 }
