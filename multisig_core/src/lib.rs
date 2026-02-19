@@ -236,16 +236,21 @@ impl MultisigState {
 // ---------------------------------------------------------------------------
 
 /// Compute PDA seed for a multisig identified by `create_key`.
-/// Seed = SHA256("multisig_state" || create_key), truncated to 32 bytes.
-/// This ensures each multisig gets a unique PDA while remaining deterministic.
+/// Seed = XOR("multisig_state\0..." padded to 32 bytes, create_key).
+/// Uniqueness comes from create_key; the tag prevents collisions with other programs.
+/// The outer NSSA PDA derivation (SHA256 of prefix + program_id + seed) ensures
+/// the final AccountId is cryptographically unique.
 pub fn multisig_state_pda_seed(create_key: &[u8; 32]) -> PdaSeed {
-    use risc0_zkvm::sha::{Impl, Sha256};
-    let mut input = Vec::with_capacity(14 + 32);
-    input.extend_from_slice(b"multisig_state");
-    input.extend_from_slice(create_key);
-    let hash = Impl::hash_bytes(&input);
-    let bytes: [u8; 32] = hash.as_bytes().try_into().expect("SHA256 is 32 bytes");
-    PdaSeed::new(bytes)
+    let tag = b"multisig_state";
+    let mut seed = [0u8; 32];
+    // XOR tag into seed, then XOR create_key
+    for i in 0..tag.len() {
+        seed[i] = tag[i];
+    }
+    for i in 0..32 {
+        seed[i] ^= create_key[i];
+    }
+    PdaSeed::new(seed)
 }
 
 /// Compute the on-chain AccountId (PDA) for a multisig given program_id and create_key.
