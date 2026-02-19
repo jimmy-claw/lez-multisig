@@ -25,12 +25,14 @@ pub fn process(
             target_instruction_data,
             target_account_count,
             pda_seeds,
+            authorized_indices,
         } => propose::handle(
             accounts,
             target_program_id,
             target_instruction_data,
             *target_account_count,
             pda_seeds,
+            authorized_indices,
         ),
 
         Instruction::Approve { proposal_index } => {

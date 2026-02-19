@@ -75,6 +75,7 @@ mod tests {
             vec![0u32],
             1,
             vec![],
+            vec![],
         );
         borsh::to_vec(&state).unwrap()
     }

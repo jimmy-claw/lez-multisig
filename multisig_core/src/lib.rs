@@ -48,6 +48,8 @@ pub enum Instruction {
         target_account_count: u8,
         /// PDA seeds for authorization in the chained call
         pda_seeds: Vec<[u8; 32]>,
+        /// Which target account indices (0-based) get `is_authorized = true`
+        authorized_indices: Vec<u8>,
     },
 
     /// Approve an existing proposal (any member, one approval per member)
@@ -99,8 +101,11 @@ pub struct Proposal {
     pub target_instruction_data: InstructionData,
     /// Expected number of target accounts at execute time
     pub target_account_count: u8,
-    /// PDA seeds for the chained call
+    /// PDA seeds for the chained call (multisig proves ownership)
     pub pda_seeds: Vec<[u8; 32]>,
+    /// Which target account indices (0-based) get `is_authorized = true`
+    /// These should correspond 1:1 with pda_seeds
+    pub authorized_indices: Vec<u8>,
 
     // -- Voting state --
     /// Account IDs that have approved (proposer auto-approves)
@@ -119,6 +124,7 @@ impl Proposal {
         target_instruction_data: InstructionData,
         target_account_count: u8,
         pda_seeds: Vec<[u8; 32]>,
+        authorized_indices: Vec<u8>,
     ) -> Self {
         Self {
             index,
@@ -127,7 +133,8 @@ impl Proposal {
             target_instruction_data,
             target_account_count,
             pda_seeds,
-            approved: vec![proposer], // proposer auto-approves
+            authorized_indices,
+            approved: vec![proposer],
             rejected: vec![],
             status: ProposalStatus::Active,
         }
@@ -218,6 +225,7 @@ impl MultisigState {
         target_instruction_data: InstructionData,
         target_account_count: u8,
         pda_seeds: Vec<[u8; 32]>,
+        authorized_indices: Vec<u8>,
     ) -> u64 {
         self.transaction_index += 1;
         let index = self.transaction_index;
@@ -228,6 +236,7 @@ impl MultisigState {
             target_instruction_data,
             target_account_count,
             pda_seeds,
+            authorized_indices,
         );
         self.proposals.push(proposal);
         index
@@ -259,4 +268,36 @@ pub fn multisig_state_pda_seed(create_key: &[u8; 32]) -> PdaSeed {
 /// Compute the on-chain AccountId (PDA) for a multisig.
 pub fn compute_multisig_state_pda(program_id: &ProgramId, create_key: &[u8; 32]) -> AccountId {
     AccountId::from((program_id, &multisig_state_pda_seed(create_key)))
+}
+
+/// Compute PDA seed for a multisig vault (holds assets authorized by the multisig).
+/// Uses "multisig_vault" tag XORed with create_key — different from state PDA.
+pub fn vault_pda_seed(create_key: &[u8; 32]) -> PdaSeed {
+    let tag = b"multisig_vault_";
+    let mut seed = [0u8; 32];
+    for i in 0..tag.len() {
+        seed[i] = tag[i];
+    }
+    for i in 0..32 {
+        seed[i] ^= create_key[i];
+    }
+    PdaSeed::new(seed)
+}
+
+/// Compute the on-chain AccountId (PDA) for a multisig's vault.
+pub fn compute_vault_pda(program_id: &ProgramId, create_key: &[u8; 32]) -> AccountId {
+    AccountId::from((program_id, &vault_pda_seed(create_key)))
+}
+
+/// Get the raw [u8; 32] seed bytes for a vault PDA (for storage in proposals).
+pub fn vault_pda_seed_bytes(create_key: &[u8; 32]) -> [u8; 32] {
+    let tag = b"multisig_vault_";
+    let mut seed = [0u8; 32];
+    for i in 0..tag.len() {
+        seed[i] = tag[i];
+    }
+    for i in 0..32 {
+        seed[i] ^= create_key[i];
+    }
+    seed
 }

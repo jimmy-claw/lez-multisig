@@ -14,6 +14,7 @@ pub fn handle(
     target_instruction_data: &InstructionData,
     target_account_count: u8,
     pda_seeds: &[[u8; 32]],
+    authorized_indices: &[u8],
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
     assert!(accounts.len() >= 2, "Propose requires multisig_state + proposer accounts");
 
@@ -36,6 +37,7 @@ pub fn handle(
         target_instruction_data.clone(),
         target_account_count,
         pda_seeds.to_vec(),
+        authorized_indices.to_vec(),
     );
 
     // Serialize updated state

@@ -3,14 +3,17 @@
 // The multisig doesn't execute actions directly. It builds a ChainedCall
 // to the target program specified in the proposal, delegating actual execution.
 //
+// For each authorized_index in the proposal, the corresponding target account
+// gets `is_authorized = true` in the ChainedCall. The NSSA runtime verifies
+// that these accounts are valid PDAs of the calling program using the PDA seeds.
+//
 // Expected accounts:
 // - accounts[0]: multisig_state (PDA, owned by multisig program)
 // - accounts[1]: executor (must be authorized signer, must be member)
 // - accounts[2..]: target accounts to pass to the ChainedCall
 
 use nssa_core::account::AccountWithMetadata;
-use nssa_core::program::{AccountPostState, ChainedCall};
-use nssa_core::program::PdaSeed;
+use nssa_core::program::{AccountPostState, ChainedCall, PdaSeed};
 use multisig_core::{MultisigState, ProposalStatus};
 
 pub fn handle(
@@ -45,7 +48,6 @@ pub fn handle(
         proposal.approved.len()
     );
 
-    // Verify target accounts match expected count
     assert_eq!(
         target_accounts.len(),
         proposal.target_account_count as usize,
@@ -54,10 +56,11 @@ pub fn handle(
         target_accounts.len()
     );
 
-    // Extract ChainedCall parameters from proposal before modifying state
+    // Extract ChainedCall parameters from proposal
     let target_program_id = proposal.target_program_id.clone();
     let target_instruction_data = proposal.target_instruction_data.clone();
     let pda_seeds: Vec<PdaSeed> = proposal.pda_seeds.iter().map(|s| PdaSeed::new(*s)).collect();
+    let authorized_indices = proposal.authorized_indices.clone();
 
     // Mark as executed and clean up
     proposal.status = ProposalStatus::Executed;
@@ -68,16 +71,26 @@ pub fn handle(
     let mut multisig_post = multisig_account.account.clone();
     multisig_post.data = state_bytes.try_into().unwrap();
 
-    // Build the ChainedCall to the target program
+    // Build target account pre_states with authorization based on proposal
+    let chained_pre_states: Vec<AccountWithMetadata> = target_accounts
+        .iter()
+        .enumerate()
+        .map(|(i, acc)| {
+            let mut acc = acc.clone();
+            if authorized_indices.contains(&(i as u8)) {
+                acc.is_authorized = true;
+            }
+            acc
+        })
+        .collect();
+
     let chained_call = ChainedCall {
         program_id: target_program_id,
         instruction_data: target_instruction_data,
-        pre_states: target_accounts.to_vec(),
+        pre_states: chained_pre_states,
         pda_seeds,
     };
 
-    // Return post-states for multisig_state and executor only
-    // (target accounts are handled by the ChainedCall)
     let executor_post = executor_account.account.clone();
 
     (

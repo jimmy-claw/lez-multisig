@@ -69,6 +69,7 @@ mod tests {
             vec![0u32],  // dummy instruction data
             1,           // 1 target account
             vec![],      // no PDA seeds
+            vec![],      // no authorized indices
         );
         borsh::to_vec(&state).unwrap()
     }
