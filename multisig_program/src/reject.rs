@@ -68,7 +68,7 @@ mod tests {
 
     fn make_state_with_proposal(threshold: u8, members: Vec<[u8; 32]>, proposer: [u8; 32]) -> Vec<u8> {
         let mut state = MultisigState::new([0u8; 32], threshold, members);
-        let fake_program_id: ProgramId = bytemuck::cast([42u8; 32]);
+        let fake_program_id: ProgramId = [42u32; 8];
         state.create_proposal(
             proposer,
             fake_program_id,
