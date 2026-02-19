@@ -3172,13 +3172,51 @@ dependencies = [
  "borsh",
  "clap",
  "clap_complete",
+ "multisig_core",
  "nssa",
  "nssa_core",
  "risc0-zkvm",
  "serde",
  "tokio",
- "treasury_core",
  "wallet",
+]
+
+[[package]]
+name = "multisig-guest"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "multisig_core",
+ "multisig_program",
+ "nssa_core",
+ "risc0-zkvm",
+]
+
+[[package]]
+name = "multisig-methods"
+version = "0.1.0"
+dependencies = [
+ "risc0-build",
+]
+
+[[package]]
+name = "multisig_core"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "nssa_core",
+ "serde",
+]
+
+[[package]]
+name = "multisig_program"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "multisig_core",
+ "nssa_core",
+ "risc0-zkvm",
+ "serde",
 ]
 
 [[package]]
@@ -5190,44 +5228,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
 dependencies = [
  "tracing-core",
-]
-
-[[package]]
-name = "treasury-guest"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "nssa_core",
- "risc0-zkvm",
- "treasury_core",
- "treasury_program",
-]
-
-[[package]]
-name = "treasury-methods"
-version = "0.1.0"
-dependencies = [
- "risc0-build",
-]
-
-[[package]]
-name = "treasury_core"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
-]
-
-[[package]]
-name = "treasury_program"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "nssa_core",
- "risc0-zkvm",
- "serde",
- "treasury_core",
 ]
 
 [[package]]

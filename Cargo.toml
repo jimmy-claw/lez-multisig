@@ -5,7 +5,7 @@ members = [
     "multisig_program",
     "methods",
     "methods/guest",
-    "examples/program_deployment",
+    "cli",
 ]
 
 [workspace.dependencies]

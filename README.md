@@ -25,12 +25,10 @@ lez-multisig/
 │       ├── add_member.rs
 │       ├── remove_member.rs
 │       └── change_threshold.rs
-├── cli/                     — CLI module (imported by lez-wallet)
-│   └── multisig.rs          — clap subcommands for multisig ops
+├── cli/                     — standalone multisig CLI binary
+│   └── src/bin/multisig.rs
 ├── methods/                 — risc0 zkVM guest build
 │   └── guest/src/bin/multisig.rs
-├── examples/
-│   └── program_deployment/  — standalone deployment CLI
 └── docs/
     └── FURPS.md             — requirements specification
 ```
@@ -52,8 +50,8 @@ cargo check -p multisig_core -p multisig_program
 # Build the zkVM guest (produces the on-chain binary)
 cargo risczero build --manifest-path methods/guest/Cargo.toml
 
-# Build the deployment CLI
-cargo build --bin multisig -p program_deployment
+# Build the CLI
+cargo build --bin multisig -p multisig-cli
 ```
 
 ### Deploy
@@ -64,34 +62,31 @@ cd /path/to/lssa/sequencer_runner
 RUST_LOG=info cargo run $(pwd)/configs/debug
 
 # Deploy the multisig program
-wallet deploy-program target/riscv32im-risc0-zkvm-elf/docker/treasury.bin
+wallet deploy-program target/riscv32im-risc0-zkvm-elf/docker/multisig.bin
 ```
 
 ## CLI Usage
 
-The multisig CLI is designed as a subcommand module for `lez-wallet`:
-
 ```bash
 # Create a 2-of-3 multisig
-lez-wallet multisig create --threshold 2 --member <PK1> --member <PK2> --member <PK3>
+multisig create --threshold 2 --member <ID1> --member <ID2> --member <ID3>
 
-# View multisig info
-lez-wallet multisig info --account <MULTISIG_ID>
-
-# Propose a transfer
-lez-wallet multisig propose --multisig <ID> --to <RECIPIENT> --amount 100
-
-# Sign a proposal
-lez-wallet multisig sign --proposal <FILE> --output <SIGNED_FILE>
-
-# Execute (after M signatures collected)
-lez-wallet multisig execute --proposal <FILE>
+# Execute a multisig transfer
+multisig execute --to <RECIPIENT> --amount 100 --signer <YOUR_ID>
 
 # Manage members
-lez-wallet multisig add-member --multisig <ID> --member <NEW_PK>
-lez-wallet multisig remove-member --multisig <ID> --member <PK>
-lez-wallet multisig change-threshold --multisig <ID> --threshold 3
+multisig add-member --member <NEW_ID>
+multisig remove-member --member <ID>
+multisig set-threshold --threshold 3
+
+# Check multisig status
+multisig status
+
+# Shell completions
+multisig completions bash
 ```
+
+The CLI reads wallet config from environment (via `WalletCore::from_env()`). Set `MULTISIG_PROGRAM` to override the program binary path.
 
 ## Tests
 
