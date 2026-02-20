@@ -8,7 +8,7 @@ risc0_zkvm::guest::entry!(main);
 mod multisig_program {
     #[allow(unused_imports)]
     use super::*;
-    use multisig_program as handlers;
+    use ::multisig_program as handlers;
     use nssa_core::account::AccountWithMetadata;
 
     /// Create a new multisig with M-of-N threshold.

@@ -11,6 +11,6 @@ path = "src/bin/multisig.rs"
 multisig_core = { path = "../../multisig_core" }
 multisig_program = { path = "../../multisig_program" }
 nssa_core.workspace = true
-nssa-framework = { git = "https://github.com/jimmy-claw/nssa-framework.git" }
+nssa-framework = { git = "https://github.com/jimmy-claw/nssa-framework.git", branch = "jimmy/fix-macro-paths" }
 risc0-zkvm.workspace = true
 borsh.workspace = true
