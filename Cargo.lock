@@ -70,7 +70,7 @@ version = "0.1.0"
 source = "git+https://github.com/logos-blockchain/lssa.git#89ce9f322a1fc4214ec818e094e6efc97be02d9c"
 dependencies = [
  "borsh",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "risc0-zkvm",
  "serde",
 ]
@@ -1031,7 +1031,7 @@ dependencies = [
  "log",
  "logos-blockchain-common-http-client",
  "nssa",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "reqwest",
  "serde",
  "serde_json",
@@ -2454,7 +2454,7 @@ dependencies = [
  "itertools 0.14.0",
  "k256",
  "nssa",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "rand 0.8.5",
  "secp256k1",
  "serde",
@@ -2506,10 +2506,9 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "common",
- "hex",
  "multisig_core",
  "nssa",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "risc0-zkvm",
  "token_core",
  "tokio",
@@ -3203,7 +3202,7 @@ dependencies = [
  "hex",
  "multisig_core",
  "nssa",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "risc0-zkvm",
  "serde",
  "serde_json",
@@ -3218,7 +3217,8 @@ dependencies = [
  "borsh",
  "multisig_core",
  "multisig_program",
- "nssa_core",
+ "nssa-framework",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "risc0-zkvm",
 ]
 
@@ -3234,7 +3234,7 @@ name = "multisig_core"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "serde",
 ]
 
@@ -3244,7 +3244,8 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "multisig_core",
- "nssa_core",
+ "nssa-framework",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "risc0-zkvm",
  "serde",
 ]
@@ -3307,7 +3308,7 @@ dependencies = [
  "borsh",
  "hex",
  "log",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "rand 0.8.5",
  "risc0-binfmt",
  "risc0-build",
@@ -3315,6 +3316,55 @@ dependencies = [
  "secp256k1",
  "serde",
  "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "nssa-framework"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/nssa-framework.git#6395eca3cf3713abb3bbb40827d584f70fcda8e1"
+dependencies = [
+ "borsh",
+ "nssa-framework-core",
+ "nssa-framework-macros",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git?branch=main)",
+]
+
+[[package]]
+name = "nssa-framework-core"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/nssa-framework.git#6395eca3cf3713abb3bbb40827d584f70fcda8e1"
+dependencies = [
+ "borsh",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git?branch=main)",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "nssa-framework-macros"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/nssa-framework.git#6395eca3cf3713abb3bbb40827d584f70fcda8e1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.115",
+]
+
+[[package]]
+name = "nssa_core"
+version = "0.1.0"
+source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+dependencies = [
+ "base58",
+ "borsh",
+ "bytemuck",
+ "chacha20",
+ "k256",
+ "risc0-zkvm",
+ "serde",
+ "serde_with",
  "thiserror 2.0.18",
 ]
 
@@ -5024,7 +5074,7 @@ version = "0.1.0"
 source = "git+https://github.com/logos-blockchain/lssa.git#89ce9f322a1fc4214ec818e094e6efc97be02d9c"
 dependencies = [
  "borsh",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "serde",
 ]
 
@@ -5418,7 +5468,7 @@ dependencies = [
  "key_protocol",
  "log",
  "nssa",
- "nssa_core",
+ "nssa_core 0.1.0 (git+https://github.com/logos-blockchain/lssa.git)",
  "optfield",
  "rand 0.8.5",
  "serde",
