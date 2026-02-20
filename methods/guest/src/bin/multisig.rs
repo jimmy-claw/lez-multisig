@@ -1,7 +1,5 @@
 #![no_main]
 
-use nssa_core::account::AccountWithMetadata;
-use nssa_core::program::AccountPostState;
 use nssa_framework::prelude::*;
 
 risc0_zkvm::guest::entry!(main);
@@ -11,11 +9,12 @@ mod multisig_program {
     #[allow(unused_imports)]
     use super::*;
     use multisig_program as handlers;
+    use nssa_core::account::AccountWithMetadata;
 
     /// Create a new multisig with M-of-N threshold.
     #[instruction]
     pub fn create_multisig(
-        #[account(init, pda = arg(create_key))]
+        #[account(init, pda = arg("create_key"))]
         multisig_state: AccountWithMetadata,
         #[account]
         member_accounts: Vec<AccountWithMetadata>,
