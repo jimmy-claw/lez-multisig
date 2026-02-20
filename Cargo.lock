@@ -3267,7 +3267,7 @@ dependencies = [
  "borsh",
  "multisig_core",
  "multisig_program",
- "nssa-framework 0.1.0 (git+https://github.com/jimmy-claw/nssa-framework.git?branch=jimmy%2Ffix-macro-paths)",
+ "nssa-framework",
  "nssa_core",
  "risc0-zkvm",
 ]
@@ -3294,7 +3294,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "multisig_core",
- "nssa-framework 0.1.0 (git+https://github.com/jimmy-claw/nssa-framework.git)",
+ "nssa-framework",
  "nssa_core",
  "risc0-zkvm",
  "serde",
@@ -3372,41 +3372,18 @@ dependencies = [
 [[package]]
 name = "nssa-framework"
 version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git?branch=jimmy%2Ffix-macro-paths#cf0994621082af0d7b623d1cb5ddad454396ce51"
+source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
 dependencies = [
  "borsh",
- "nssa-framework-core 0.1.0 (git+https://github.com/jimmy-claw/nssa-framework.git?branch=jimmy%2Ffix-macro-paths)",
- "nssa-framework-macros 0.1.0 (git+https://github.com/jimmy-claw/nssa-framework.git?branch=jimmy%2Ffix-macro-paths)",
- "nssa_core",
-]
-
-[[package]]
-name = "nssa-framework"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#6395eca3cf3713abb3bbb40827d584f70fcda8e1"
-dependencies = [
- "borsh",
- "nssa-framework-core 0.1.0 (git+https://github.com/jimmy-claw/nssa-framework.git)",
- "nssa-framework-macros 0.1.0 (git+https://github.com/jimmy-claw/nssa-framework.git)",
+ "nssa-framework-core",
+ "nssa-framework-macros",
  "nssa_core",
 ]
 
 [[package]]
 name = "nssa-framework-core"
 version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git?branch=jimmy%2Ffix-macro-paths#cf0994621082af0d7b623d1cb5ddad454396ce51"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "nssa-framework-core"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#6395eca3cf3713abb3bbb40827d584f70fcda8e1"
+source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
 dependencies = [
  "borsh",
  "nssa_core",
@@ -3418,17 +3395,7 @@ dependencies = [
 [[package]]
 name = "nssa-framework-macros"
 version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git?branch=jimmy%2Ffix-macro-paths#cf0994621082af0d7b623d1cb5ddad454396ce51"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "nssa-framework-macros"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#6395eca3cf3713abb3bbb40827d584f70fcda8e1"
+source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
 dependencies = [
  "proc-macro2",
  "quote",
