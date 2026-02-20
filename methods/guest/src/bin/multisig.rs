@@ -16,7 +16,7 @@ mod multisig_program {
     pub fn create_multisig(
         #[account(init, pda = arg("create_key"))]
         multisig_state: AccountWithMetadata,
-        #[account]
+        #[account()]
         member_accounts: Vec<AccountWithMetadata>,
         create_key: [u8; 32],
         threshold: u8,
@@ -97,7 +97,7 @@ mod multisig_program {
         executor: AccountWithMetadata,
         #[account(mut)]
         proposal: AccountWithMetadata,
-        #[account]
+        #[account()]
         target_accounts: Vec<AccountWithMetadata>,
         proposal_index: u64,
     ) -> NssaResult {
