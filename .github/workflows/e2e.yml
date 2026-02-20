@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RISC0_VERSION: "3.0.5"
+  LSSA_REF: "main"
 
 jobs:
   unit-tests:
@@ -26,7 +27,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +43,7 @@ jobs:
           prefix-key: "e2e"
           cache-targets: true
 
-      # Cache the guest binary separately (expensive to build)
+      # Cache guest binary (expensive risc0 build)
       - name: Cache guest binary
         id: cache-guest
         uses: actions/cache@v4
@@ -54,18 +55,21 @@ jobs:
         if: steps.cache-guest.outputs.cache-hit != 'true'
         run: cargo risczero build --manifest-path methods/guest/Cargo.toml
 
-      # Clone LSSA for sequencer and token.bin
+      # Clone LSSA (needed for sequencer + token.bin)
       - name: Clone LSSA
-        run: git clone --depth 1 https://github.com/logos-blockchain/lssa.git /tmp/lssa
+        run: git clone --depth 1 --branch ${{ env.LSSA_REF }} https://github.com/logos-blockchain/lssa.git /tmp/lssa
 
-      # Cache sequencer binary
+      # Cache sequencer binary (keyed on LSSA commit)
+      - name: Get LSSA commit hash
+        id: lssa-hash
+        run: echo "hash=$(git -C /tmp/lssa rev-parse HEAD)" >> $GITHUB_OUTPUT
+
       - name: Cache sequencer
         id: cache-seq
         uses: actions/cache@v4
         with:
           path: /tmp/lssa/target/release/sequencer_runner
-          key: sequencer-${{ hashFiles('/tmp/lssa/Cargo.lock') }}
-          restore-keys: sequencer-
+          key: sequencer-${{ steps.lssa-hash.outputs.hash }}
 
       - name: Build sequencer
         if: steps.cache-seq.outputs.cache-hit != 'true'
