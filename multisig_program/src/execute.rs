@@ -1,215 +1,110 @@
-// Execute handler — executes a transaction when M-of-N threshold is met
+// Execute handler — executes a fully-approved proposal by emitting a ChainedCall.
+//
+// The multisig doesn't execute actions directly. It builds a ChainedCall
+// to the target program specified in the proposal, delegating actual execution.
+//
+// Expected accounts:
+// - accounts[0]: multisig_state PDA (read threshold/membership)
+// - accounts[1]: executor (must be authorized signer, must be member)
+// - accounts[2]: proposal PDA account (owned by multisig program)
+// - accounts[3..]: target accounts to pass to the ChainedCall
 
 use nssa_core::account::AccountWithMetadata;
-use nssa_core::program::{AccountPostState, ChainedCall, ProgramId};
-use multisig_core::MultisigState;
+use nssa_core::program::{AccountPostState, ChainedCall, PdaSeed};
+use multisig_core::{MultisigState, Proposal, ProposalStatus};
 
-/// Handle Execute instruction
-/// 
-/// Expected accounts:
-/// - accounts[0]: multisig_state (PDA) — contains threshold, members, nonce
-/// - accounts[1]: vault (PDA) — the multisig vault to transfer from
-/// - accounts[2..]: authorized accounts — the signers (must have is_authorized = true)
-/// 
-/// Authorization: M distinct members must be authorized
 pub fn handle(
     accounts: &[AccountWithMetadata],
-    _recipient: &nssa_core::account::AccountId,
-    amount: u128,
+    _proposal_index: u64,
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
-    // Parse accounts
-    assert!(accounts.len() >= 2, "Execute requires multisig_state and vault accounts");
-    
+    assert!(accounts.len() >= 3, "Execute requires at least multisig_state + executor + proposal");
+
     let multisig_account = &accounts[0];
-    let vault_account = &accounts[1];
-    
-    // Get authorized signers from accounts with is_authorized = true
-    let authorized_signers: Vec<[u8; 32]> = accounts[2..]
-        .iter()
-        .filter(|acc| acc.is_authorized)
-        .map(|acc| {
-            // AccountId is 32 bytes - extract the key bytes
-            let id_bytes: Vec<u8> = acc.account_id.value().clone().into();
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&id_bytes[..32]);
-            key
-        })
-        .collect();
-    
-    assert!(!authorized_signers.is_empty(), "No authorized signers");
-    
-    // Deserialize multisig state
+    let executor_account = &accounts[1];
+    let proposal_account = &accounts[2];
+    let target_accounts = &accounts[3..];
+
+    assert!(executor_account.is_authorized, "Executor must sign the transaction");
+
+    // Read multisig state
     let state_data: Vec<u8> = multisig_account.account.data.clone().into();
     let state: MultisigState = borsh::from_slice(&state_data)
         .expect("Failed to deserialize multisig state");
-    
-    // Check threshold
-    let valid_signers = state.count_valid_signers(&authorized_signers);
+
+    let executor_id = *executor_account.account_id.value();
+    assert!(state.is_member(&executor_id), "Executor is not a multisig member");
+
+    // Read proposal
+    let proposal_data: Vec<u8> = proposal_account.account.data.clone().into();
+    let mut proposal: Proposal = borsh::from_slice(&proposal_data)
+        .expect("Failed to deserialize proposal");
+
+    assert_eq!(proposal.multisig_create_key, state.create_key, "Proposal does not belong to this multisig");
+    assert_eq!(proposal.status, ProposalStatus::Active, "Proposal is not active");
     assert!(
-        valid_signers >= state.threshold as usize,
-        "Insufficient signatures: need {}, got {}",
+        proposal.has_threshold(state.threshold),
+        "Proposal does not have enough approvals: need {}, have {}",
         state.threshold,
-        valid_signers
+        proposal.approved.len()
     );
-    
-    // Check vault balance
-    assert!(
-        vault_account.account.balance >= amount,
-        "Insufficient balance: have {}, need {}",
-        vault_account.account.balance,
-        amount
+
+    assert_eq!(
+        target_accounts.len(),
+        proposal.target_account_count as usize,
+        "Expected {} target accounts, got {}",
+        proposal.target_account_count,
+        target_accounts.len()
     );
-    
-    // Build post states
-    let mut post_states = Vec::new();
-    
-    // Update multisig state (increment nonce)
-    let mut new_state = state.clone();
-    new_state.nonce += 1;
-    
-    let mut multisig_post = multisig_account.account.clone();
-    let state_bytes = borsh::to_vec(&new_state).unwrap();
-    multisig_post.data = state_bytes.try_into().unwrap();
-    post_states.push(AccountPostState::new(multisig_post));
-    
-    // Update vault (decrease balance)
-    let mut vault_post = vault_account.account.clone();
-    vault_post.balance = vault_post.balance.saturating_sub(amount);
-    post_states.push(AccountPostState::new(vault_post));
-    
-    // Emit chained call to transfer (placeholder - would integrate with token program)
-    // Using zeroed program ID - real implementation would call token program
-    let zero_program_id = ProgramId::default();
-    let chained_calls = vec![ChainedCall {
-        program_id: zero_program_id,
-        instruction_data: vec![],
-        pre_states: vec![],
-        pda_seeds: vec![],
-    }];
 
-    (post_states, chained_calls)
-}
+    // Extract ChainedCall parameters from proposal
+    let target_program_id = proposal.target_program_id.clone();
+    let target_instruction_data = proposal.target_instruction_data.clone();
+    let pda_seeds: Vec<PdaSeed> = proposal.pda_seeds.iter().map(|s| PdaSeed::new(*s)).collect();
+    let authorized_indices = proposal.authorized_indices.clone();
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use nssa_core::account::{Account, AccountId};
+    // Mark as executed
+    proposal.status = ProposalStatus::Executed;
 
-    fn make_account(id: &[u8; 32], balance: u128, data: Vec<u8>) -> AccountWithMetadata {
-        let mut account = Account::default();
-        account.balance = balance;
-        account.data = data.try_into().unwrap();
-        AccountWithMetadata {
-            account_id: AccountId::new(*id),
-            account,
-            is_authorized: false,
-        }
+    // Write back proposal
+    let proposal_bytes = borsh::to_vec(&proposal).unwrap();
+    let mut proposal_post = proposal_account.account.clone();
+    proposal_post.data = proposal_bytes.try_into().unwrap();
+
+    // Build target account pre_states with authorization based on proposal
+    let chained_pre_states: Vec<AccountWithMetadata> = target_accounts
+        .iter()
+        .enumerate()
+        .map(|(i, acc)| {
+            let mut acc = acc.clone();
+            if authorized_indices.contains(&(i as u8)) {
+                acc.is_authorized = true;
+            }
+            acc
+        })
+        .collect();
+
+    let chained_call = ChainedCall {
+        program_id: target_program_id,
+        instruction_data: target_instruction_data,
+        pre_states: chained_pre_states,
+        pda_seeds,
+    };
+
+    // Multisig state unchanged
+    let multisig_post = multisig_account.account.clone();
+    let executor_post = executor_account.account.clone();
+
+    // Post states for: multisig, executor, proposal, then all target accounts passed through
+    let mut post_states = vec![
+        AccountPostState::new(multisig_post),
+        AccountPostState::new(executor_post),
+        AccountPostState::new(proposal_post),
+    ];
+
+    // Target accounts must also have post_states (unchanged, they'll be modified by ChainedCall)
+    for target in target_accounts {
+        post_states.push(AccountPostState::new(target.account.clone()));
     }
 
-    fn make_multisig_state(threshold: u8, members: Vec<[u8; 32]>) -> Vec<u8> {
-        let state = MultisigState::new(threshold, members);
-        borsh::to_vec(&state).unwrap()
-    }
-
-    #[test]
-    fn test_execute_1_of_1_threshold() {
-        let members = vec![[1u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
-        let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
-        ];
-        
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 100);
-        
-        assert_eq!(post_states.len(), 2);
-    }
-
-    #[test]
-    fn test_execute_nonce_increments() {
-        let members = vec![[1u8; 32], [2u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
-        let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
-        ];
-        
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 50);
-        
-        let state_data: Vec<u8> = post_states[0].account().data.clone().into();
-        let state: MultisigState = borsh::from_slice(&state_data).unwrap();
-        assert_eq!(state.nonce, 1);
-    }
-
-    #[test]
-    fn test_execute_exact_threshold() {
-        // 2-of-3, exactly 2 signers
-        let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
-        let state_data = make_multisig_state(2, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        let mut acc2 = make_account(&[2u8; 32], 0, vec![]);
-        acc2.is_authorized = true;
-        
-        let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
-            acc2,
-        ];
-        
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 100);
-        
-        assert_eq!(post_states.len(), 2);
-    }
-
-    #[test]
-    fn test_execute_zero_amount() {
-        let members = vec![[1u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
-        let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            make_account(&[20u8; 32], 1000, vec![]),
-            acc1,
-        ];
-        
-        // Zero amount should work (just increments nonce)
-        let (post_states, _) = handle(&accounts, &AccountId::default(), 0);
-        
-        assert_eq!(post_states.len(), 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "No authorized signers")]
-    fn test_execute_missing_vault() {
-        let members = vec![[1u8; 32]];
-        let state_data = make_multisig_state(1, members);
-        
-        let mut acc1 = make_account(&[1u8; 32], 0, vec![]);
-        acc1.is_authorized = true;
-        
-        // Only 1 account (missing vault) - but we have authorized signer
-        // Actually fails at "No authorized signers" before vault check
-        let accounts = vec![
-            make_account(&[10u8; 32], 0, state_data),
-            acc1,
-        ];
-        
-        handle(&accounts, &AccountId::default(), 100);
-    }
+    (post_states, vec![chained_call])
 }

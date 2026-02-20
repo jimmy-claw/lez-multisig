@@ -1,36 +1,43 @@
-# LEZ Multisig — M-of-N Threshold Signatures
+# LEZ Multisig — M-of-N On-Chain Proposals
 
-An M-of-N multisig program for the [Logos Execution Zone (LEZ)](https://github.com/logos-blockchain/lssa). Multiple signers must approve transfers before they execute — no single key can drain the funds.
+An M-of-N multisig governance program for the [Logos Execution Zone (LEZ)](https://github.com/logos-blockchain/lssa). Inspired by [Squads Protocol v4](https://squads.so/) — proposals live on-chain as separate PDA accounts. Signers approve asynchronously, no offline coordination needed.
 
-📄 **[FURPS Specification](docs/FURPS.md)** — functional requirements, usability, reliability, performance, security constraints.
+📄 **[Technical Specification](SPEC.md)** — accounts, PDA derivation, instruction set, validation rules.
 
 ## How It Works
 
-- **Create** a multisig with N members and threshold M
-- **Propose** a transfer — creates a proposal that requires M approvals
-- **Sign** a proposal — each signer approves independently
-- **Execute** — once M signatures are collected, the transfer goes through
-- **Manage** members and threshold (add/remove members, change threshold) — also requires M signatures
-- State lives in a **PDA** (Program Derived Account) — only the multisig program controls it
+```
+CreateMultisig → Propose → Approve (×M) → Execute → ChainedCall to target program
+```
+
+1. **Create** a multisig with N members, threshold M, and a unique `create_key`
+2. **Propose** an action — creates a proposal PDA account, auto-approves the proposer
+3. **Approve** — other members approve independently, each in their own transaction
+4. **Execute** — once M approvals collected, emits a `ChainedCall` to the target program
+5. **Reject** — members can reject; if rejections ≥ (N - M + 1), the proposal is dead
+
+**Key design:** The multisig never executes actions directly. It collects votes and delegates execution via NSSA `ChainedCall`. For example, a token transfer goes: multisig approves → `ChainedCall` to token program → token program moves funds.
 
 ## Project Structure
 
 ```
 lez-multisig/
-├── multisig_core/           — shared types, instructions, PDA helpers
-├── multisig_program/        — on-chain handlers
+├── multisig_core/           — shared types, instructions, PDA derivation
+├── multisig_program/        — on-chain handlers (risc0 guest)
 │   └── src/
+│       ├── lib.rs           — instruction dispatch
 │       ├── create_multisig.rs
-│       ├── execute.rs
-│       ├── add_member.rs
-│       ├── remove_member.rs
-│       └── change_threshold.rs
-├── cli/                     — standalone multisig CLI binary
-│   └── src/bin/multisig.rs
-├── methods/                 — risc0 zkVM guest build
+│       ├── propose.rs
+│       ├── approve.rs
+│       ├── reject.rs
+│       └── execute.rs
+├── methods/                 — risc0 zkVM guest build config
 │   └── guest/src/bin/multisig.rs
-└── docs/
-    └── FURPS.md             — requirements specification
+├── e2e_tests/               — integration tests against live sequencer
+│   └── tests/e2e_multisig.rs
+├── cli/                     — CLI (⚠️ needs update for new proposal PDA flow)
+├── SPEC.md                  — full technical specification
+└── docs/FURPS.md            — requirements specification
 ```
 
 ## Quick Start
@@ -39,64 +46,121 @@ lez-multisig/
 
 - Rust nightly (edition 2024)
 - [Risc0 toolchain](https://dev.risczero.com/api/zkvm/install): `curl -L https://risczero.com/install | bash && rzup install`
-- A running LSSA sequencer
+- Docker (for reproducible guest builds)
+- Clone of [lssa](https://github.com/logos-blockchain/lssa) (for sequencer + token program binary)
 
-### Build
+### 1. Build the guest binary
 
 ```bash
-# Check core logic
-cargo check -p multisig_core -p multisig_program
+cd lez-multisig
 
 # Build the zkVM guest (produces the on-chain binary)
+# This requires Docker and takes ~15-20 minutes on first run
 cargo risczero build --manifest-path methods/guest/Cargo.toml
 
-# Build the CLI
-cargo build --bin multisig -p multisig-cli
+# Verify output exists
+ls -la target/riscv32im-risc0-zkvm-elf/docker/multisig.bin
 ```
 
-### Deploy
+### 2. Run unit tests
 
 ```bash
-# Start the sequencer (from lssa repo)
-cd /path/to/lssa/sequencer_runner
-RUST_LOG=info cargo run $(pwd)/configs/debug
-
-# Deploy the multisig program
-wallet deploy-program target/riscv32im-risc0-zkvm-elf/docker/multisig.bin
+# Core types + program handlers (4 tests)
+cargo test -p multisig_core -p multisig_program
 ```
 
-## CLI Usage
+### 3. Run e2e tests
+
+The e2e test deploys both the multisig and token programs to a local sequencer, then runs a full flow: create token → create multisig → fund vault → propose transfer → approve → execute via ChainedCall → verify balances.
 
 ```bash
-# Create a 2-of-3 multisig
-multisig create --threshold 2 --member <ID1> --member <ID2> --member <ID3>
+# Terminal 1: Start the sequencer (from lssa repo)
+cd /path/to/lssa
+cargo run -p sequencer_runner --features standalone --release -- \
+  sequencer_runner/configs/debug
 
-# Execute a multisig transfer
-multisig execute --to <RECIPIENT> --amount 100 --signer <YOUR_ID>
+# Terminal 2: Run the e2e test (from lez-multisig repo)
+cd /path/to/lez-multisig
 
-# Manage members
-multisig add-member --member <NEW_ID>
-multisig remove-member --member <ID>
-multisig set-threshold --threshold 3
+# Set required env vars
+export MULTISIG_PROGRAM=$(pwd)/target/riscv32im-risc0-zkvm-elf/docker/multisig.bin
+export TOKEN_PROGRAM=/path/to/lssa/artifacts/program_methods/token.bin
+export SEQUENCER_URL=http://127.0.0.1:3040  # optional, this is the default
 
-# Check multisig status
-multisig status
-
-# Shell completions
-multisig completions bash
+# Run
+cargo test -p lez-multisig-e2e -- --nocapture
 ```
 
-The CLI reads wallet config from environment (via `WalletCore::from_env()`). Set `MULTISIG_PROGRAM` to override the program binary path.
+**Expected output:**
+```
+📦 Deploying programs...
+  token deployed: <hash>
+  multisig deployed: <hash>
 
-## Tests
+═══ STEP 1: Create fungible token ═══
+  Minter balance: Some(1000000)
+  ✅ Token created, minter has 1,000,000 tokens
 
-```bash
-cargo test -p multisig_program
+═══ STEP 2: Create 2-of-3 multisig ═══
+  Multisig state PDA: <address>
+  Vault PDA: <address>
+  ✅ 2-of-3 multisig created!
+
+═══ STEP 3: Transfer tokens to multisig vault ═══
+  Vault balance: Some(500)
+  ✅ Vault funded with 500 tokens!
+
+═══ STEP 4: Propose transfer 200 tokens from vault ═══
+  Proposal PDA: <address>
+  ✅ Proposal #1 created (1/2 approvals)
+
+═══ STEP 5: Member 2 approves ═══
+  ✅ 2/2 approvals — ready to execute!
+
+═══ STEP 6: Execute — transfer tokens via ChainedCall ═══
+
+═══ STEP 7: Verify results ═══
+  ✅ Proposal marked as executed
+  Vault balance: Some(300)
+  Recipient balance: Some(200)
+
+🎉 Full multisig + token transfer e2e test PASSED!
 ```
 
-18 unit tests covering creation, execution, member management, threshold changes, and edge cases (duplicate members, threshold bounds, replay protection via nonce).
+## On-Chain State
+
+See [SPEC.md](SPEC.md) for full details. Summary:
+
+### Accounts
+
+| Account | PDA Seed | Purpose |
+|---------|----------|---------|
+| Multisig State | `"multisig_state__" XOR create_key` | Config: members, threshold, tx counter |
+| Proposal | `"multisig_prop___" XOR create_key XOR index` | Single proposal: action + votes |
+| Vault | `"multisig_vault__" XOR create_key` | Holds assets controlled by multisig |
+
+All PDAs: `AccountId = SHA256(NSSA_PREFIX ‖ program_id ‖ seed)`
+
+### Instructions
+
+| Instruction | Accounts | Description |
+|---|---|---|
+| `CreateMultisig` | `[state_pda]` | Initialize multisig with members + threshold |
+| `Propose` | `[state_pda, proposer, proposal_pda]` | Create proposal, auto-approve proposer |
+| `Approve` | `[state_pda, approver, proposal_pda]` | Add approval to proposal |
+| `Reject` | `[state_pda, rejector, proposal_pda]` | Add rejection to proposal |
+| `Execute` | `[state_pda, executor, proposal_pda, ...targets]` | Execute approved proposal via ChainedCall |
+
+## Known Issues
+
+- [ ] CLI needs update for proposal PDA flow ([current CLI uses old 2-account layout](cli/src/bin/multisig.rs))
+- [ ] CLI requires `logos-blockchain-circuits` transitive dependency ([#1](https://github.com/jimmy-claw/lez-multisig/issues/1))
+- [ ] No `CloseProposal` instruction yet (executed/rejected proposals stay on-chain)
+- [ ] Config change instructions (`AddMember`, `RemoveMember`, `ChangeThreshold`) not yet implemented in program
 
 ## References
 
+- [Technical Specification (SPEC.md)](SPEC.md)
+- [FURPS Requirements](docs/FURPS.md)
 - [LSSA Repository](https://github.com/logos-blockchain/lssa)
-- [FURPS Specification](docs/FURPS.md)
+- [Squads Protocol v4](https://squads.so/) — design inspiration

@@ -1,8 +1,8 @@
 pub mod create_multisig;
+pub mod propose;
+pub mod approve;
+pub mod reject;
 pub mod execute;
-pub mod add_member;
-pub mod remove_member;
-pub mod change_threshold;
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};
@@ -15,24 +15,36 @@ pub fn process(
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
     match instruction {
         Instruction::CreateMultisig {
+            create_key,
             threshold,
             members,
-        } => create_multisig::handle(accounts, *threshold, members),
+        } => create_multisig::handle(accounts, create_key, *threshold, members),
 
-        Instruction::Execute { recipient, amount } => {
-            execute::handle(accounts, recipient, *amount)
+        Instruction::Propose {
+            target_program_id,
+            target_instruction_data,
+            target_account_count,
+            pda_seeds,
+            authorized_indices,
+        } => propose::handle(
+            accounts,
+            target_program_id,
+            target_instruction_data,
+            *target_account_count,
+            pda_seeds,
+            authorized_indices,
+        ),
+
+        Instruction::Approve { proposal_index } => {
+            approve::handle(accounts, *proposal_index)
         }
 
-        Instruction::AddMember { new_member } => {
-            add_member::handle(accounts, new_member)
+        Instruction::Reject { proposal_index } => {
+            reject::handle(accounts, *proposal_index)
         }
 
-        Instruction::RemoveMember { member_to_remove } => {
-            remove_member::handle(accounts, member_to_remove)
-        }
-
-        Instruction::ChangeThreshold { new_threshold } => {
-            change_threshold::handle(accounts, *new_threshold)
+        Instruction::Execute { proposal_index } => {
+            execute::handle(accounts, *proposal_index)
         }
     }
 }
