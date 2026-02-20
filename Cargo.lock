@@ -2506,6 +2506,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "common",
+ "hex",
  "multisig_core",
  "nssa",
  "nssa_core",
