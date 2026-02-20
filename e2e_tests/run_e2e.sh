@@ -20,11 +20,24 @@ SEQ_PID=$!
 cd - > /dev/null
 
 echo "   PID: $SEQ_PID, waiting for startup..."
-sleep 8
 
-# Verify it's running
-if ! kill -0 $SEQ_PID 2>/dev/null; then
-    echo "❌ Sequencer failed to start. Check ~/sequencer.log"
+# Wait until sequencer is listening (up to 10 minutes for compilation)
+echo "   Waiting for sequencer to listen on port $SEQ_PORT..."
+for i in $(seq 1 120); do
+    if curl -s "$SEQ_URL" > /dev/null 2>&1; then
+        echo "   ✅ Sequencer is up! (waited ${i}x5s)"
+        break
+    fi
+    if ! kill -0 $SEQ_PID 2>/dev/null; then
+        echo "❌ Sequencer process died. Check ~/sequencer.log"
+        exit 1
+    fi
+    sleep 5
+done
+
+if ! curl -s "$SEQ_URL" > /dev/null 2>&1; then
+    echo "❌ Sequencer failed to start after 10 min. Check ~/sequencer.log"
+    kill $SEQ_PID 2>/dev/null
     exit 1
 fi
 
