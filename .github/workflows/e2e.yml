@@ -40,7 +40,7 @@ jobs:
           export PATH="$HOME/.risc0/bin:$PATH"
           rzup install cargo-risczero ${{ env.RISC0_VERSION }}
           rzup install r0vm ${{ env.RISC0_VERSION }}
-          rzup install rust ${{ env.RISC0_VERSION }}
+          rzup install rust  # installs the rust toolchain paired with the installed cargo-risczero
 
       - uses: Swatinem/rust-cache@v2
         with:
