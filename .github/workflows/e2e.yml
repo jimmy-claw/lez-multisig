@@ -63,6 +63,11 @@ jobs:
       - name: Clone LSSA
         run: git clone --depth 1 --branch ${{ env.LSSA_REF }} https://github.com/logos-blockchain/lssa.git /tmp/lssa
 
+      # Clone logos-blockchain-circuits (required by sequencer_runner at runtime)
+      - name: Clone logos-blockchain-circuits
+        run: |
+          git clone --depth 1 https://github.com/logos-blockchain/logos-blockchain-circuits.git $HOME/.logos-blockchain-circuits
+
       # Cache sequencer binary (keyed on LSSA commit)
       - name: Get LSSA commit hash
         id: lssa-hash
