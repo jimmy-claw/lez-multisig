@@ -63,13 +63,12 @@ jobs:
       - name: Clone LSSA
         run: git clone --depth 1 --branch ${{ env.LSSA_REF }} https://github.com/logos-blockchain/lssa.git /tmp/lssa
 
-      # Download logos-blockchain-circuits pre-built release (required by sequencer_runner at runtime)
-      - name: Download logos-blockchain-circuits
+      # Install logos-blockchain-circuits (required by sequencer_runner at runtime)
+      - name: Install logos-blockchain-circuits
         run: |
-          curl -L https://github.com/logos-blockchain/logos-blockchain-circuits/releases/download/v0.4.1/logos-blockchain-circuits-v0.4.1-linux-x86_64.tar.gz \
-            -o /tmp/lbc.tar.gz
-          mkdir -p $HOME/.logos-blockchain-circuits
-          tar -xzf /tmp/lbc.tar.gz -C $HOME/.logos-blockchain-circuits --strip-components=1
+          curl -sSL https://raw.githubusercontent.com/logos-blockchain/logos-blockchain/main/scripts/setup-logos-blockchain-circuits.sh | bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Cache sequencer binary (keyed on LSSA commit)
       - name: Get LSSA commit hash
