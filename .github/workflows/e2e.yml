@@ -88,14 +88,16 @@ jobs:
           /tmp/lssa/target/release/sequencer_runner sequencer_runner/configs/debug > /tmp/sequencer.log 2>&1 &
           echo "Waiting for sequencer..."
           for i in $(seq 1 60); do
-            if curl -s http://127.0.0.1:3040 > /dev/null 2>&1; then
-              echo "Sequencer ready after ${i}s"
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3040 2>/dev/null || echo "000")
+            if [ "$CODE" = "200" ] || [ "$CODE" = "405" ]; then
+              echo "Sequencer ready after ${i}s (HTTP $CODE)"
               break
             fi
             sleep 1
           done
-          if ! curl -s http://127.0.0.1:3040 > /dev/null 2>&1; then
-            echo "Sequencer failed to start"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3040 2>/dev/null || echo "000")
+          if [ "$CODE" != "200" ] && [ "$CODE" != "405" ]; then
+            echo "Sequencer failed to start (HTTP $CODE)"
             cat /tmp/sequencer.log
             exit 1
           fi
