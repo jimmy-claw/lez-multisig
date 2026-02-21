@@ -37,5 +37,19 @@ pub fn handle(
     let state_bytes = borsh::to_vec(&state).unwrap();
     multisig_account.data = state_bytes.try_into().unwrap();
     
-    (vec![AccountPostState::new_claimed(multisig_account)], vec![])
+    let mut post_states = vec![AccountPostState::new_claimed(multisig_account)];
+
+    // Claim member accounts so they have program_owner set to this program.
+    // This satisfies LSSA Rule 7: the executor (a member) must be owned by
+    // the multisig program for Execute to work.
+    // accounts[1..] are the member accounts passed in order.
+    for member_acc in accounts.iter().skip(1) {
+        assert!(
+            member_acc.account == Account::default(),
+            "Member account must be uninitialized to be claimed"
+        );
+        post_states.push(AccountPostState::new_claimed(Account::default()));
+    }
+
+    (post_states, vec![])
 }
