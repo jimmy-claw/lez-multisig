@@ -67,6 +67,8 @@ pub fn handle(
     multisig_account.data = state_bytes.try_into().unwrap();
     
     // Build post_states: claim multisig_state + all member accounts
+    // Claiming member accounts satisfies LSSA Rule 7: the executor (a member) must be
+    // owned by the multisig program for Execute to work.
     let mut post_states = vec![AccountPostState::new_claimed(multisig_account)];
     
     for i in 0..members.len() {
