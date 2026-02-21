@@ -1,0 +1,110 @@
+{
+  "name": "lez-registry",
+  "version": "0.1.0",
+  "description": "On-chain program registry for LEZ. Developers register their program IDs with human-readable metadata and an IDL content address (Codex CID) stored on Logos Storage.",
+  "instructions": [
+    {
+      "name": "Register",
+      "description": "Register a new program in the on-chain registry. Permissionless — anyone can register. The signer becomes the author and only they can update the entry later.",
+      "args": [
+        { "name": "program_id",   "type": "[u32; 8]",    "description": "Unique on-chain program ID (hash of bytecode)" },
+        { "name": "name",         "type": "String",       "description": "Human-readable name, e.g. 'lez-multisig'" },
+        { "name": "version",      "type": "String",       "description": "Semantic version string, e.g. '0.1.0'" },
+        { "name": "idl_cid",      "type": "String",       "description": "Codex CID of the IDL JSON stored on Logos Storage" },
+        { "name": "description",  "type": "String",       "description": "Free-form description of the program" },
+        { "name": "tags",         "type": "Vec<String>",  "description": "Searchable tags, e.g. ['governance', 'multisig']" }
+      ],
+      "accounts": [
+        {
+          "name": "registry_state",
+          "pda":      true,
+          "writable": true,
+          "description": "Singleton registry state PDA. Seed: 'registry_state__' (16 bytes) padded to 32 bytes."
+        },
+        {
+          "name": "author",
+          "pda":      false,
+          "writable": false,
+          "signer":   true,
+          "description": "The account registering the program. Becomes the entry's author."
+        },
+        {
+          "name": "program_entry_pda",
+          "pda":      true,
+          "writable": true,
+          "init":     true,
+          "description": "New per-program PDA. Seed: XOR('program_entry___' padded to 32 bytes, program_id_as_32_bytes)."
+        }
+      ]
+    },
+    {
+      "name": "Update",
+      "description": "Update metadata for an existing registered program. Only the original author (signer) is allowed.",
+      "args": [
+        { "name": "program_id",   "type": "[u32; 8]",    "description": "Program ID to identify which entry to update" },
+        { "name": "version",      "type": "String",       "description": "New version string (empty = no change)" },
+        { "name": "idl_cid",      "type": "String",       "description": "New Codex CID (empty = no change)" },
+        { "name": "description",  "type": "String",       "description": "New description (empty = no change)" },
+        { "name": "tags",         "type": "Vec<String>",  "description": "New tags list (empty vec = no change)" }
+      ],
+      "accounts": [
+        {
+          "name": "registry_state",
+          "pda":      true,
+          "writable": false,
+          "description": "Singleton registry state PDA (read-only in this instruction)."
+        },
+        {
+          "name": "author",
+          "pda":      false,
+          "writable": false,
+          "signer":   true,
+          "description": "Must match the original author stored in program_entry_pda."
+        },
+        {
+          "name": "program_entry_pda",
+          "pda":      true,
+          "writable": true,
+          "description": "Existing per-program PDA to update. Must already be initialized."
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "RegistryState",
+      "description": "Singleton account tracking global registry statistics.",
+      "fields": [
+        { "name": "authority",     "type": "[u8; 32]", "description": "Authority account (reserved for future permissioned ops)" },
+        { "name": "program_count", "type": "u64",      "description": "Total number of programs registered" }
+      ],
+      "pda": {
+        "description": "Seed: 'registry_state__' (16 bytes) XOR [0u8; 16] padded to 32 bytes",
+        "seeds": [
+          { "kind": "literal", "value": "registry_state__" }
+        ]
+      }
+    },
+    {
+      "name": "ProgramEntry",
+      "description": "Per-program entry storing metadata and IDL content address.",
+      "fields": [
+        { "name": "program_id",    "type": "[u32; 8]",    "description": "The registered program's on-chain ID" },
+        { "name": "name",          "type": "String",       "description": "Human-readable name" },
+        { "name": "version",       "type": "String",       "description": "Version string" },
+        { "name": "author",        "type": "[u8; 32]",     "description": "AccountId of the registrant" },
+        { "name": "idl_cid",       "type": "String",       "description": "Codex CID pointing to the IDL JSON" },
+        { "name": "description",   "type": "String",       "description": "Free-form description" },
+        { "name": "registered_at", "type": "u64",          "description": "Timestamp (seconds since epoch) of registration" },
+        { "name": "tags",          "type": "Vec<String>",  "description": "Searchable tags" }
+      ],
+      "pda": {
+        "description": "Seed: XOR('program_entry___' padded to 32 bytes, program_id as big-endian 32 bytes)",
+        "seeds": [
+          { "kind": "literal", "value": "program_entry___" },
+          { "kind": "arg",     "name": "program_id" }
+        ]
+      }
+    }
+  ]
+}

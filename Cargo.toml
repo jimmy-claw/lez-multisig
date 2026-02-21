@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "multisig_core",
     "multisig_program",
+    "registry_core",
+    "registry_program",
     "methods",
     "methods/guest",
     "cli",
