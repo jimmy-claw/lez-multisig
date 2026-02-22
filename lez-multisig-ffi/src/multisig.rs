@@ -403,9 +403,9 @@ async fn propose_async(v: &Value) -> String {
 
     let instruction = Instruction::Propose {
         target_program_id,
-        target_instruction_data: nssa_core::program::InstructionData::new(target_instruction_data),
+        target_instruction_data: target_instruction_data.chunks(4).map(|c| { let mut buf = [0u8; 4]; buf[..c.len()].copy_from_slice(c); u32::from_le_bytes(buf) }).collect(),
         target_account_count,
-        pda_seeds: pda_seeds.into_iter().map(|s| nssa_core::program::PdaSeed::new(s)).collect(),
+        pda_seeds,
         authorized_indices,
     };
 

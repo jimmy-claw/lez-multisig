@@ -174,6 +174,15 @@ char* lez_multisig_get_state(const char* args_json);
  */
 void lez_multisig_free_string(char* s);
 
+
+/* ── IDL ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Returns the program IDL as a JSON string (embedded at compile time).
+ * Caller must free with lez_multisig_free_string().
+ */
+const char* lez_multisig_get_idl(void);
+
 /* ── Version Info ────────────────────────────────────────────────────────── */
 
 /**

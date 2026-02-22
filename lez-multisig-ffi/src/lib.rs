@@ -135,3 +135,13 @@ pub extern "C" fn lez_multisig_free_string(s: *mut c_char) {
 pub extern "C" fn lez_multisig_version() -> *mut c_char {
     to_cstring(env!("CARGO_PKG_VERSION").to_string())
 }
+
+// ── IDL ──────────────────────────────────────────────────────────────────────
+
+/// Returns the program IDL as a JSON string (static, embedded at compile time).
+/// Caller must free with lez_multisig_free_string().
+#[no_mangle]
+pub extern "C" fn lez_multisig_get_idl() -> *mut c_char {
+    const IDL_JSON: &str = include_str!("multisig_idl.json");
+    to_cstring(IDL_JSON.to_string())
+}
