@@ -22,10 +22,10 @@
 - **F2.4**: Execution delegates via NSSA `ChainedCall` to the target program — the multisig never modifies external state directly
 - **F2.5**: Support native token (λ) transfers via ChainedCall to token program
 
-### F3. Member Management *(not yet implemented — post-PoC)*
-- **F3.1**: Add member (requires M current signatures)
-- **F3.2**: Remove member (requires M current signatures)
-- **F3.3**: Change threshold (requires M current signatures, must satisfy 1 ≤ M ≤ N)
+### F3. Member Management ✅
+- **F3.1**: Add member (requires M current signatures) ✅
+- **F3.2**: Remove member (requires M current signatures, threshold guard: rejects if N-1 < M) ✅
+- **F3.3**: Change threshold (requires M current signatures, must satisfy 1 ≤ M ≤ N) ✅
 
 ---
 
@@ -51,11 +51,14 @@ lez-wallet multisig reject --multisig <id> --proposal <index>
 # Execute once threshold is met
 lez-wallet multisig execute --multisig <id> --proposal <index>
 
-# Add member (post-PoC)
+# Propose adding a member (creates config change proposal)
 lez-wallet multisig add-member --multisig <id> --member <new_pk>
 
-# Remove member (post-PoC)
+# Propose removing a member
 lez-wallet multisig remove-member --multisig <id> --member <pk>
+
+# Propose changing threshold
+lez-wallet multisig change-threshold --multisig <id> --threshold <new_M>
 ```
 
 ---
@@ -113,7 +116,6 @@ Due to NSSA runtime validation rules, member accounts must be **fresh keypairs**
 
 ## Known Limitations (PoC Scope)
 
-- Member management (F3) not yet implemented
 - CLI needs update for proposal PDA flow
 - No `CloseProposal` to reclaim executed/rejected proposal storage
 - No time-lock between threshold reached and execution

@@ -15,7 +15,7 @@ Updated: 2026-02-23
 | Auto-reject when dead | ✅ Implemented | Reject handler handles it |
 | Member claiming workaround | ✅ Implemented | Documented in README |
 | CLI commands | ✅ Updated | 3-account layout + proposal PDA flow |
-| Member management (Add/Remove/ChangeThreshold) | ❌ Not implemented | Deferred to v0.2 |
+| Member management (Add/Remove/ChangeThreshold) | ✅ Implemented | Config change proposals |
 | Unit tests | ✅ Complete | All instruction handlers covered |
 | E2E test (full flow) | ✅ Implemented | `e2e_tests/` covers full flow |
 | README accuracy | ✅ Accurate | |
@@ -50,9 +50,9 @@ Updated: 2026-02-23
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| F3.1: Add member (M sigs required) | ❌ | Deferred — design in SPEC |
-| F3.2: Remove member (M sigs required) | ❌ | Deferred |
-| F3.3: Change threshold (1≤M≤N guard) | ❌ | Deferred |
+| F3.1: Add member (M sigs required) | ✅ | ProposeAddMember instruction |
+| F3.2: Remove member (M sigs required) | ✅ | ProposeRemoveMember + threshold guard |
+| F3.3: Change threshold (1≤M≤N guard) | ✅ | ProposeChangeThreshold instruction |
 
 ### U1 — CLI Commands
 
@@ -64,8 +64,9 @@ Updated: 2026-02-23
 | `multisig approve` | ✅ | |
 | `multisig reject` | ✅ | |
 | `multisig execute` | ✅ | |
-| `multisig add-member` | ❌ | Needs F3 (v0.2) |
-| `multisig remove-member` | ❌ | Needs F3 (v0.2) |
+| `multisig add-member` | ✅ | ProposeAddMember config proposal |
+| `multisig remove-member` | ✅ | ProposeRemoveMember config proposal |
+| `multisig change-threshold` | ✅ | ProposeChangeThreshold config proposal |
 
 ### R — Reliability
 
@@ -113,8 +114,7 @@ All account layouts, PDA derivation formulas, and instruction logic in the code 
 ## Remaining Gaps (v0.2 Scope)
 
 ### Feature Gaps
-1. **Member management**: AddMember, RemoveMember, ChangeThreshold (F3)
-2. **CloseProposal**: Reclaim storage from executed/rejected proposals
+1. **CloseProposal**: Reclaim storage from executed/rejected proposals
 3. **Time-lock**: Optional delay between threshold reached and execution
 4. **Messaging integration**: In-band signing requests via Logos Messaging / Waku
 

@@ -69,11 +69,41 @@ pub enum Instruction {
     Execute {
         proposal_index: u64,
     },
+
+    /// Propose adding a new member to the multisig (requires M approvals to execute).
+    ProposeAddMember {
+        new_member: [u8; 32],
+    },
+
+    /// Propose removing a member from the multisig (requires M approvals to execute).
+    /// Will be rejected on execute if removing would make N < M.
+    ProposeRemoveMember {
+        member: [u8; 32],
+    },
+
+    /// Propose changing the approval threshold (requires M approvals to execute).
+    /// Must satisfy 1 ≤ new_threshold ≤ N (checked on execute).
+    ProposeChangeThreshold {
+        new_threshold: u8,
+    },
 }
 
 // ---------------------------------------------------------------------------
 // Proposal state (stored in its own PDA account)
 // ---------------------------------------------------------------------------
+
+/// Configuration change action embedded in a proposal.
+/// When a proposal has a `config_action`, execute modifies MultisigState
+/// directly instead of emitting a ChainedCall.
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub enum ConfigAction {
+    /// Add a new member to the multisig
+    AddMember { new_member: [u8; 32] },
+    /// Remove an existing member from the multisig
+    RemoveMember { member: [u8; 32] },
+    /// Change the approval threshold
+    ChangeThreshold { new_threshold: u8 },
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub enum ProposalStatus {
@@ -117,6 +147,8 @@ pub struct Proposal {
     pub rejected: Vec<[u8; 32]>,
     /// Current status
     pub status: ProposalStatus,
+    /// Optional config change action (if set, execute modifies MultisigState instead of ChainedCall)
+    pub config_action: Option<ConfigAction>,
 }
 
 impl Proposal {
@@ -142,6 +174,30 @@ impl Proposal {
             approved: vec![proposer],
             rejected: vec![],
             status: ProposalStatus::Active,
+            config_action: None,
+        }
+    }
+
+    /// Create a new config change proposal (no ChainedCall target)
+    pub fn new_config(
+        index: u64,
+        proposer: [u8; 32],
+        multisig_create_key: [u8; 32],
+        action: ConfigAction,
+    ) -> Self {
+        Self {
+            index,
+            proposer,
+            multisig_create_key,
+            target_program_id: [0u32; 8],
+            target_instruction_data: vec![],
+            target_account_count: 0,
+            pda_seeds: vec![],
+            authorized_indices: vec![],
+            approved: vec![proposer],
+            rejected: vec![],
+            status: ProposalStatus::Active,
+            config_action: Some(action),
         }
     }
 
