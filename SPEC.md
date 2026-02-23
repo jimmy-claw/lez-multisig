@@ -56,14 +56,14 @@ struct Proposal {
 
 ## PDA Derivation
 
-All PDAs follow the LEZ standard: `AccountId = SHA256(prefix ‖ program_id ‖ seed)` where prefix is the 32-byte constant `"/LEZ/v0.2/AccountId/PDA/\x00\x00\x00\x00\x00\x00\x00"`.
+All PDAs follow the NSSA standard: `AccountId = SHA256(prefix ‖ program_id ‖ seed)` where prefix is the 32-byte constant `"/NSSA/v0.2/AccountId/PDA/\x00\x00\x00\x00\x00\x00\x00"` (upstream constant, not yet renamed).
 
 ### Multisig State PDA
 
 ```
 tag  = "multisig_state__"            (16 bytes, padded to 32 with 0x00)
 seed = tag XOR create_key            (32 bytes)
-PDA  = LEZ_PDA(program_id, seed)
+PDA  = NSSA_PDA(program_id, seed)
 ```
 
 ### Proposal PDA
@@ -72,7 +72,7 @@ PDA  = LEZ_PDA(program_id, seed)
 tag  = "multisig_prop___"            (16 bytes, padded to 32 with 0x00)
 seed = tag XOR create_key            (32 bytes)
 seed[24..32] ^= proposal_index      (big-endian u64, XOR'd into last 8 bytes)
-PDA  = LEZ_PDA(program_id, seed)
+PDA  = NSSA_PDA(program_id, seed)
 ```
 
 ### Vault PDA
@@ -80,7 +80,7 @@ PDA  = LEZ_PDA(program_id, seed)
 ```
 tag  = "multisig_vault__"            (16 bytes, padded to 32 with 0x00)
 seed = tag XOR create_key            (32 bytes)
-PDA  = LEZ_PDA(program_id, seed)
+PDA  = NSSA_PDA(program_id, seed)
 ```
 
 ### Properties
