@@ -15,6 +15,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 base64 = "0.22"
 hex = "0.4"
+bs58 = "0.5"
 
 # nssa deps for transaction building
 nssa_core = { git = "https://github.com/logos-blockchain/lssa.git", branch = "main", features = ["host"] }

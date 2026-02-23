@@ -45,16 +45,27 @@ fn parse_program_id_hex(s: &str) -> Result<nssa::ProgramId, String> {
     Ok(pid)
 }
 
-/// Parse a 64-char hex string into [u8; 32].
+/// Parse a 32-byte key from hex (64 chars) or base58.
 fn parse_hex32(s: &str, field: &str) -> Result<[u8; 32], String> {
     let s = s.trim_start_matches("0x");
-    if s.len() != 64 {
-        return Err(format!("{} must be 64 hex chars (got {})", field, s.len()));
+    // Try hex first (64 chars)
+    if s.len() == 64 {
+        if let Ok(bytes) = hex::decode(s) {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            return Ok(arr);
+        }
     }
-    let bytes = hex::decode(s).map_err(|e| format!("invalid hex in {}: {}", field, e))?;
-    let mut arr = [0u8; 32];
-    arr.copy_from_slice(&bytes);
-    Ok(arr)
+    // Try base58
+    match bs58::decode(s).into_vec() {
+        Ok(bytes) if bytes.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            Ok(arr)
+        }
+        Ok(bytes) => Err(format!("{}: base58 decoded to {} bytes, expected 32", field, bytes.len())),
+        Err(_) => Err(format!("{} must be 64 hex chars or valid base58 (got len {})", field, s.len())),
+    }
 }
 
 /// Submit a transaction and wait for confirmation.
@@ -239,10 +250,11 @@ async fn create_async(v: &Value) -> String {
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
-        Ok(id) => id,
-        Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
+    let account_bytes = match parse_hex32(account_hex, "account") {
+        Ok(b) => b,
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
+    let signer_id = AccountId::from(account_bytes);
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
 
@@ -384,10 +396,11 @@ async fn propose_async(v: &Value) -> String {
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
-        Ok(id) => id,
-        Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
+    let account_bytes = match parse_hex32(account_hex, "account") {
+        Ok(b) => b,
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
+    let signer_id = AccountId::from(account_bytes);
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
 
@@ -509,10 +522,11 @@ async fn vote_async(v: &Value, is_approve: bool) -> String {
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
-        Ok(id) => id,
-        Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
+    let account_bytes = match parse_hex32(account_hex, "account") {
+        Ok(b) => b,
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
+    let signer_id = AccountId::from(account_bytes);
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
     let proposal_pda = compute_proposal_pda(&multisig_program_id, &create_key, proposal_index);
@@ -608,10 +622,11 @@ async fn execute_async(v: &Value) -> String {
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
-        Ok(id) => id,
-        Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
+    let account_bytes = match parse_hex32(account_hex, "account") {
+        Ok(b) => b,
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
+    let signer_id = AccountId::from(account_bytes);
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
     let proposal_pda = compute_proposal_pda(&multisig_program_id, &create_key, proposal_index);
