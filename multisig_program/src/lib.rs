@@ -1,12 +1,13 @@
 pub mod create_multisig;
 pub mod propose;
+pub mod propose_config;
 pub mod approve;
 pub mod reject;
 pub mod execute;
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};
-use multisig_core::Instruction;
+use multisig_core::{ConfigAction, Instruction};
 
 /// Main entry point called from the guest binary.
 pub fn process(
@@ -45,6 +46,18 @@ pub fn process(
 
         Instruction::Execute { proposal_index } => {
             execute::handle(accounts, *proposal_index)
+        }
+
+        Instruction::ProposeAddMember { new_member } => {
+            propose_config::handle(accounts, ConfigAction::AddMember { new_member: *new_member })
+        }
+
+        Instruction::ProposeRemoveMember { member } => {
+            propose_config::handle(accounts, ConfigAction::RemoveMember { member: *member })
+        }
+
+        Instruction::ProposeChangeThreshold { new_threshold } => {
+            propose_config::handle(accounts, ConfigAction::ChangeThreshold { new_threshold: *new_threshold })
         }
     }
 }
