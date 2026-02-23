@@ -81,6 +81,30 @@ async fn submit_and_wait(
     Ok(response.tx_hash.to_string())
 }
 
+
+/// Verify that a transaction was included by checking the resulting account state.
+/// Retries a few times with delays to account for sequencer processing time.
+async fn verify_account_exists(
+    wallet_core: &WalletCore,
+    account_id: AccountId,
+    max_retries: u32,
+) -> Result<bool, String> {
+    for attempt in 0..max_retries {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        match wallet_core.get_account_public(account_id).await {
+            Ok(account) => {
+                let data: Vec<u8> = account.data.into();
+                if !data.is_empty() {
+                    return Ok(true);
+                }
+            }
+            Err(_) => {}
+        }
+    }
+    Ok(false)
+}
 /// Build + submit a signed transaction for a multisig instruction.
 async fn submit_signed_multisig_tx(
     wallet_core: &WalletCore,
@@ -290,12 +314,28 @@ async fn create_async(v: &Value) -> String {
         signer_id,
         instruction,
     ).await {
-        Ok(tx_hash) => json!({
-            "success": true,
-            "tx_hash": tx_hash,
-            "multisig_state_pda": multisig_state_pda.to_string(),
-            "create_key": hex::encode(create_key),
-        }).to_string(),
+        Ok(tx_hash) => {
+            // Verify the multisig state PDA was actually created on-chain
+            match verify_account_exists(&wallet_core, multisig_state_pda, 5).await {
+                Ok(true) => json!({
+                    "success": true,
+                    "tx_hash": tx_hash,
+                    "multisig_state_pda": multisig_state_pda.to_string(),
+                    "create_key": hex::encode(create_key),
+                    "verified": true,
+                }).to_string(),
+                Ok(false) => json!({
+                    "success": false,
+                    "error": format!("TX {} submitted but multisig state account not found after retries", tx_hash),
+                    "tx_hash": tx_hash,
+                }).to_string(),
+                Err(e) => json!({
+                    "success": false,
+                    "error": format!("TX {} submitted but verification failed: {}", tx_hash, e),
+                    "tx_hash": tx_hash,
+                }).to_string(),
+            }
+        }
         Err(e) => json!({"success": false, "error": e}).to_string(),
     }
 }
@@ -456,12 +496,28 @@ async fn propose_async(v: &Value) -> String {
         signer_id,
         instruction,
     ).await {
-        Ok(tx_hash) => json!({
-            "success": true,
-            "tx_hash": tx_hash,
-            "proposal_index": next_index,
-            "proposal_pda": proposal_pda.to_string(),
-        }).to_string(),
+        Ok(tx_hash) => {
+            // Verify the proposal PDA was created on-chain
+            match verify_account_exists(&wallet_core, proposal_pda, 5).await {
+                Ok(true) => json!({
+                    "success": true,
+                    "tx_hash": tx_hash,
+                    "proposal_index": next_index,
+                    "proposal_pda": proposal_pda.to_string(),
+                    "verified": true,
+                }).to_string(),
+                Ok(false) => json!({
+                    "success": false,
+                    "error": format!("TX {} submitted but proposal account not found after retries", tx_hash),
+                    "tx_hash": tx_hash,
+                }).to_string(),
+                Err(e) => json!({
+                    "success": false,
+                    "error": format!("TX {} submitted but verification failed: {}", tx_hash, e),
+                    "tx_hash": tx_hash,
+                }).to_string(),
+            }
+        }
         Err(e) => json!({"success": false, "error": e}).to_string(),
     }
 }
