@@ -28,7 +28,7 @@ pub fn handle(
 
     // Read multisig state
     let state_data: Vec<u8> = multisig_account.account.data.clone().into();
-    let state: MultisigState = borsh::from_slice(&state_data)
+    let mut state: MultisigState = borsh::from_slice(&state_data)
         .expect("Failed to deserialize multisig state");
 
     let executor_id = *executor_account.account_id.value();
