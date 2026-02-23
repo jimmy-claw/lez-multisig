@@ -110,6 +110,45 @@ enum Commands {
         account: String,
     },
 
+    /// Propose adding a new member to the multisig
+    AddMember {
+        /// Multisig create_key (base58)
+        #[arg(long)]
+        multisig: String,
+        /// Your account ID (base58, must be a member)
+        #[arg(long)]
+        account: String,
+        /// New member account ID (base58)
+        #[arg(long)]
+        member: String,
+    },
+
+    /// Propose removing a member from the multisig
+    RemoveMember {
+        /// Multisig create_key (base58)
+        #[arg(long)]
+        multisig: String,
+        /// Your account ID (base58, must be a member)
+        #[arg(long)]
+        account: String,
+        /// Member to remove (base58)
+        #[arg(long)]
+        member: String,
+    },
+
+    /// Propose changing the approval threshold
+    ChangeThreshold {
+        /// Multisig create_key (base58)
+        #[arg(long)]
+        multisig: String,
+        /// Your account ID (base58, must be a member)
+        #[arg(long)]
+        account: String,
+        /// New threshold value
+        #[arg(long)]
+        threshold: u8,
+    },
+
     /// Show multisig status
     Status,
 
@@ -452,6 +491,98 @@ async fn main() {
                 account_id,
                 Instruction::Execute { proposal_index: index },
                 "Execute",
+            ).await;
+        }
+
+        // ── Add Member ─────────────────────────────────────────────────
+        Commands::AddMember { multisig, account, member } => {
+            let ck = parse_create_key(&multisig);
+            let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
+            let account_id: AccountId = account.parse().expect("Invalid account ID");
+            let new_member_id: AccountId = member.parse().expect("Invalid member ID");
+
+            // Read current state to get next proposal index
+            let state = wallet_core
+                .sequencer_client
+                .get_account(multisig_state_id)
+                .await
+                .expect("Failed to get multisig state");
+            let state_data: Vec<u8> = state.account.data.into();
+            let ms_state: multisig_core::MultisigState = borsh::from_slice(&state_data)
+                .expect("Failed to deserialize multisig state");
+            let proposal_index = ms_state.transaction_index + 1;
+            let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal_index);
+
+            println!("➕ Proposing add member...");
+            println!("   New member:   {}", new_member_id);
+            println!("   Proposal #{}  PDA: {}", proposal_index, proposal_pda);
+
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id, proposal_pda],
+                account_id,
+                Instruction::ProposeAddMember { new_member: *new_member_id.value() },
+                "ProposeAddMember",
+            ).await;
+        }
+
+        // ── Remove Member ───────────────────────────────────────────────
+        Commands::RemoveMember { multisig, account, member } => {
+            let ck = parse_create_key(&multisig);
+            let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
+            let account_id: AccountId = account.parse().expect("Invalid account ID");
+            let member_id: AccountId = member.parse().expect("Invalid member ID");
+
+            let state = wallet_core
+                .sequencer_client
+                .get_account(multisig_state_id)
+                .await
+                .expect("Failed to get multisig state");
+            let state_data: Vec<u8> = state.account.data.into();
+            let ms_state: multisig_core::MultisigState = borsh::from_slice(&state_data)
+                .expect("Failed to deserialize multisig state");
+            let proposal_index = ms_state.transaction_index + 1;
+            let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal_index);
+
+            println!("➖ Proposing remove member...");
+            println!("   Member:       {}", member_id);
+            println!("   Proposal #{}  PDA: {}", proposal_index, proposal_pda);
+
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id, proposal_pda],
+                account_id,
+                Instruction::ProposeRemoveMember { member: *member_id.value() },
+                "ProposeRemoveMember",
+            ).await;
+        }
+
+        // ── Change Threshold ────────────────────────────────────────────
+        Commands::ChangeThreshold { multisig, account, threshold } => {
+            let ck = parse_create_key(&multisig);
+            let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
+            let account_id: AccountId = account.parse().expect("Invalid account ID");
+
+            let state = wallet_core
+                .sequencer_client
+                .get_account(multisig_state_id)
+                .await
+                .expect("Failed to get multisig state");
+            let state_data: Vec<u8> = state.account.data.into();
+            let ms_state: multisig_core::MultisigState = borsh::from_slice(&state_data)
+                .expect("Failed to deserialize multisig state");
+            let proposal_index = ms_state.transaction_index + 1;
+            let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal_index);
+
+            println!("🔧 Proposing change threshold to {}...", threshold);
+            println!("   Proposal #{}  PDA: {}", proposal_index, proposal_pda);
+
+            submit_signed_tx(
+                &wallet_core, program_id,
+                vec![multisig_state_id, account_id, proposal_pda],
+                account_id,
+                Instruction::ProposeChangeThreshold { new_threshold: threshold },
+                "ProposeChangeThreshold",
             ).await;
         }
 
