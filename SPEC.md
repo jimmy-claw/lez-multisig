@@ -2,7 +2,7 @@
 
 ## Overview
 
-An M-of-N multisig governance program for the NSSA runtime, inspired by [Squads Protocol v4](https://docs.squads.so/). The multisig collects approvals from members and executes actions on other programs via NSSA ChainedCalls.
+An M-of-N multisig governance program for the LEZ runtime, inspired by [Squads Protocol v4](https://docs.squads.so/). The multisig collects approvals from members and executes actions on other programs via LEZ ChainedCalls.
 
 **Key principle:** The multisig never directly modifies external state. It only manages proposals and voting, then delegates execution via `ChainedCall`.
 
@@ -56,14 +56,14 @@ struct Proposal {
 
 ## PDA Derivation
 
-All PDAs follow the NSSA standard: `AccountId = SHA256(prefix ‖ program_id ‖ seed)` where prefix is the 32-byte constant `"/NSSA/v0.2/AccountId/PDA/\x00\x00\x00\x00\x00\x00\x00"`.
+All PDAs follow the LEZ standard: `AccountId = SHA256(prefix ‖ program_id ‖ seed)` where prefix is the 32-byte constant `"/LEZ/v0.2/AccountId/PDA/\x00\x00\x00\x00\x00\x00\x00"`.
 
 ### Multisig State PDA
 
 ```
 tag  = "multisig_state__"            (16 bytes, padded to 32 with 0x00)
 seed = tag XOR create_key            (32 bytes)
-PDA  = NSSA_PDA(program_id, seed)
+PDA  = LEZ_PDA(program_id, seed)
 ```
 
 ### Proposal PDA
@@ -72,7 +72,7 @@ PDA  = NSSA_PDA(program_id, seed)
 tag  = "multisig_prop___"            (16 bytes, padded to 32 with 0x00)
 seed = tag XOR create_key            (32 bytes)
 seed[24..32] ^= proposal_index      (big-endian u64, XOR'd into last 8 bytes)
-PDA  = NSSA_PDA(program_id, seed)
+PDA  = LEZ_PDA(program_id, seed)
 ```
 
 ### Vault PDA
@@ -80,7 +80,7 @@ PDA  = NSSA_PDA(program_id, seed)
 ```
 tag  = "multisig_vault__"            (16 bytes, padded to 32 with 0x00)
 seed = tag XOR create_key            (32 bytes)
-PDA  = NSSA_PDA(program_id, seed)
+PDA  = LEZ_PDA(program_id, seed)
 ```
 
 ### Properties
@@ -244,7 +244,7 @@ Executes a fully-approved proposal by emitting a ChainedCall.
 
 ## Validation Rules
 
-The NSSA runtime enforces these rules on every transaction:
+The LEZ runtime enforces these rules on every transaction:
 
 1. Pre/post state arrays must have equal length
 2. All account IDs must be unique
