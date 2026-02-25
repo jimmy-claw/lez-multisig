@@ -77,12 +77,12 @@
       "args": [
         {
           "name": "target_program_id",
-          "type": "program_id"
+          "type": "ProgramId"
         },
         {
           "name": "target_instruction_data",
           "type": {
-            "defined": "InstructionData"
+            "vec": "u32"
           }
         },
         {
@@ -205,5 +205,6 @@
   ],
   "name": "multisig_program",
   "types": [],
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "instruction_type": "multisig_core::Instruction"
 }

@@ -13,8 +13,8 @@
 //!
 //! Prerequisites:
 //! - Running sequencer at SEQUENCER_URL (default http://127.0.0.1:3040)
-//! - MULTISIG_PROGRAM env var pointing to compiled multisig guest binary
-//! - TOKEN_PROGRAM env var pointing to token guest binary (from lssa artifacts)
+//! - MULTISIG_PROGRAM env var pointing to compiled multisig guest binary (default: target/riscv32im-risc0-zkvm-elf/docker/multisig.bin)
+//! - TOKEN_PROGRAM env var pointing to token guest binary (default: $HOME/lssa/artifacts/program_methods/token.bin)
 
 use std::time::Duration;
 
@@ -144,13 +144,19 @@ async fn test_multisig_token_transfer() {
     println!("📦 Deploying programs...");
 
     let token_path = std::env::var("TOKEN_PROGRAM")
-        .unwrap_or_else(|_| panic!("TOKEN_PROGRAM env var not set"));
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").expect("HOME env var not set");
+            format!("{}/lssa/artifacts/program_methods/token.bin", home)
+        });
     let token_bytecode = std::fs::read(&token_path)
         .unwrap_or_else(|_| panic!("Cannot read token binary at '{}'", token_path));
     let (token_deploy_tx, token_program_id) = deploy_program(token_bytecode);
 
     let multisig_path = std::env::var("MULTISIG_PROGRAM")
-        .unwrap_or_else(|_| panic!("MULTISIG_PROGRAM env var not set"));
+        .unwrap_or_else(|_| {
+            let manifest_dir = env!("CARGO_MANIFEST_DIR");
+            format!("{}/../target/riscv32im-risc0-zkvm-elf/docker/multisig.bin", manifest_dir)
+        });
     let multisig_bytecode = std::fs::read(&multisig_path)
         .unwrap_or_else(|_| panic!("Cannot read multisig binary at '{}'", multisig_path));
     let (multisig_deploy_tx, multisig_program_id) = deploy_program(multisig_bytecode);
