@@ -27,7 +27,8 @@ fn to_cstring(s: String) -> *mut c_char {
 }
 
 fn error_json(msg: &str) -> *mut c_char {
-    let body = format!("{{\"success\":false,\"error\":{}}}", serde_json::json!(msg));
+    let v = serde_json::json!(msg).to_string();
+    let body = format!("{{\"success\":false,\"error\":{}}}", v);
     to_cstring(body)
 }
 
