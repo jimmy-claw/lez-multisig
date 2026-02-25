@@ -24,6 +24,9 @@ jobs:
       - name: Run unit tests
         run: cargo test -p multisig_core -p multisig_program
 
+      - name: Build FFI crate
+        run: cargo build -p lez-multisig-ffi
+
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
