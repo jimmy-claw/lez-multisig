@@ -59,6 +59,18 @@ fn parse_program_id(s: &str) -> Result<ProgramId, String> {
     parse_program_id_hex(s)
 }
 
+fn hex_to_bytes_32(s: &str) -> Result<[u8; 32], String> {
+    let bytes = hex::decode(s).map_err(|e| format!("invalid hex: {}", e))?;
+    if bytes.len() != 32 {
+        return Err(format!("expected 32 bytes, got {}", bytes.len()));
+    }
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&bytes);
+    Ok(arr)
+}
+
+
+
 fn parse_account_id(s: &str) -> Result<AccountId, String> {
     if let Ok(id) = s.parse() { return Ok(id); }
     let s = s.trim_start_matches("0x");
@@ -93,21 +105,22 @@ fn multisig_program_create_multisig_impl(args: &str) -> Result<String, String> {
     let program_id = parse_program_id_hex(v["program_id_hex"].as_str().or_else(|| v["multisig_program_id"].as_str()).ok_or("missing program_id_hex")?)?;
     let wallet = init_wallet(&v)?;
 
-    let create_key = serde_json::from_value(v["create_key"].clone()).map_err(|e| format!("parse error: {}", e))?;
+    let create_key = hex_to_bytes_32(v["create_key"].as_str().ok_or("missing create_key")?)?;
     let threshold = v["threshold"].as_u64().ok_or("expected number")? as u8;
-    let members = v["members"].as_array().ok_or("expected array")?.iter().map(|item| Ok(serde_json::from_value(item.clone()).map_err(|e| format!("parse error: {}", e))?)).collect::<Result<Vec<_>, String>>()?;
+    let members: Vec<AccountId> = v["members"].as_array().ok_or("expected array")?.iter().map(|item| parse_account_id(item.as_str().ok_or("member must be string")?)).collect::<Result<Vec<_>, String>>()?;
 
     let multisig_state = compute_pda(&[
         &create_key as &[u8],
     ]);
-    let member_accounts = parse_account_id(v["member_accounts"].as_str().ok_or("missing member_accounts")?)?;
+    let member_accounts = compute_pda(&[&create_key as &[u8], b"members"]);
 
+    let signer = parse_account_id(v["account"].as_str().ok_or("missing account")?)?;
     let mut account_ids: Vec<AccountId> = vec![
         multisig_state,
         member_accounts,
+        signer,
     ];
-    let signer_ids: Vec<AccountId> = vec![
-    ];
+    let signer_ids: Vec<AccountId> = vec![signer];
 
     let instruction = ProgramInstruction::CreateMultisig {
         create_key,
