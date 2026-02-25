@@ -90,7 +90,7 @@ pub extern "C" fn multisig_program_create_multisig(args_json: *const c_char) -> 
 
 fn multisig_program_create_multisig_impl(args: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(args).map_err(|e| format!("invalid JSON: {}", e))?;
-    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().ok_or("missing program_id_hex")?)?;
+    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().or_else(|| v["multisig_program_id"].as_str()).ok_or("missing program_id_hex")?)?;
     let wallet = init_wallet(&v)?;
 
     let create_key = serde_json::from_value(v["create_key"].clone()).map_err(|e| format!("parse error: {}", e))?;
@@ -151,7 +151,7 @@ pub extern "C" fn multisig_program_propose(args_json: *const c_char) -> *mut c_c
 
 fn multisig_program_propose_impl(args: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(args).map_err(|e| format!("invalid JSON: {}", e))?;
-    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().ok_or("missing program_id_hex")?)?;
+    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().or_else(|| v["multisig_program_id"].as_str()).ok_or("missing program_id_hex")?)?;
     let wallet = init_wallet(&v)?;
 
     let target_program_id = parse_program_id(v["target_program_id"].as_str().ok_or("expected string for ProgramId")?)?;
@@ -217,7 +217,7 @@ pub extern "C" fn multisig_program_approve(args_json: *const c_char) -> *mut c_c
 
 fn multisig_program_approve_impl(args: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(args).map_err(|e| format!("invalid JSON: {}", e))?;
-    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().ok_or("missing program_id_hex")?)?;
+    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().or_else(|| v["multisig_program_id"].as_str()).ok_or("missing program_id_hex")?)?;
     let wallet = init_wallet(&v)?;
 
     let proposal_index = v["proposal_index"].as_u64().ok_or("expected number")? as u64;
@@ -275,7 +275,7 @@ pub extern "C" fn multisig_program_reject(args_json: *const c_char) -> *mut c_ch
 
 fn multisig_program_reject_impl(args: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(args).map_err(|e| format!("invalid JSON: {}", e))?;
-    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().ok_or("missing program_id_hex")?)?;
+    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().or_else(|| v["multisig_program_id"].as_str()).ok_or("missing program_id_hex")?)?;
     let wallet = init_wallet(&v)?;
 
     let proposal_index = v["proposal_index"].as_u64().ok_or("expected number")? as u64;
@@ -333,7 +333,7 @@ pub extern "C" fn multisig_program_execute(args_json: *const c_char) -> *mut c_c
 
 fn multisig_program_execute_impl(args: &str) -> Result<String, String> {
     let v: Value = serde_json::from_str(args).map_err(|e| format!("invalid JSON: {}", e))?;
-    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().ok_or("missing program_id_hex")?)?;
+    let program_id = parse_program_id_hex(v["program_id_hex"].as_str().or_else(|| v["multisig_program_id"].as_str()).ok_or("missing program_id_hex")?)?;
     let wallet = init_wallet(&v)?;
 
     let proposal_index = v["proposal_index"].as_u64().ok_or("expected number")? as u64;
