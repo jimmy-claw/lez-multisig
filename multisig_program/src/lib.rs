@@ -5,59 +5,201 @@ pub mod approve;
 pub mod reject;
 pub mod execute;
 
-use nssa_core::account::AccountWithMetadata;
-use nssa_core::program::{AccountPostState, ChainedCall};
-use multisig_core::{ConfigAction, Instruction};
+use nssa_core::program::{InstructionData, ProgramId};
+use multisig_core::ConfigAction;
+use lez_framework::prelude::*;
 
-/// Main entry point called from the guest binary.
-pub fn process(
-    accounts: &[AccountWithMetadata],
-    instruction: &Instruction,
-) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
-    match instruction {
-        Instruction::CreateMultisig {
-            create_key,
-            threshold,
-            members,
-        } => create_multisig::handle(accounts, create_key, *threshold, members),
+/// Multisig program using #[lez_program] macro.
+/// Uses external multisig_core::Instruction enum for dispatch.
+#[lez_program(instruction = "multisig_core::Instruction")]
+mod multisig_program {
+    use super::*;
 
-        Instruction::Propose {
-            target_program_id,
-            target_instruction_data,
+    /// Create a new M-of-N multisig.
+    /// multisig_state is initialized as a PDA derived from create_key.
+    #[instruction]
+    pub fn create_multisig(
+        #[account(init, pda = arg("create_key"))]
+        multisig_state: AccountWithMetadata,
+        member_accounts: Vec<AccountWithMetadata>,
+        create_key: [u8; 32],
+        threshold: u8,
+        members: Vec<[u8; 32]>,
+    ) -> LezResult {
+        let accounts: Vec<AccountWithMetadata> = std::iter::once(multisig_state)
+            .chain(member_accounts.into_iter())
+            .collect();
+        let (post_states, chained_calls) =
+            crate::create_multisig::handle(&accounts, &create_key, threshold, &members);
+        Ok(LezOutput { post_states, chained_calls })
+    }
+
+    /// Propose a new transaction.
+    /// proposer must be a member signer. proposal is initialized as a new PDA.
+    #[instruction]
+    pub fn propose(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        proposer: AccountWithMetadata,
+        #[account(init)]
+        proposal: AccountWithMetadata,
+        target_program_id: ProgramId,
+        target_instruction_data: InstructionData,
+        target_account_count: u8,
+        pda_seeds: Vec<[u8; 32]>,
+        authorized_indices: Vec<u8>,
+    ) -> LezResult {
+        let accounts = vec![multisig_state, proposer, proposal];
+        let (post_states, chained_calls) = crate::propose::handle(
+            &accounts,
+            &target_program_id,
+            &target_instruction_data,
             target_account_count,
-            pda_seeds,
-            authorized_indices,
-        } => propose::handle(
-            accounts,
-            target_program_id,
-            target_instruction_data,
-            *target_account_count,
-            pda_seeds,
-            authorized_indices,
-        ),
+            &pda_seeds,
+            &authorized_indices,
+        );
+        Ok(LezOutput { post_states, chained_calls })
+    }
 
-        Instruction::Approve { proposal_index } => {
-            approve::handle(accounts, *proposal_index)
-        }
+    /// Approve an existing proposal.
+    /// approver must be a member signer.
+    #[instruction]
+    pub fn approve(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        approver: AccountWithMetadata,
+        #[account(mut)]
+        proposal: AccountWithMetadata,
+        proposal_index: u64,
+    ) -> LezResult {
+        let accounts = vec![multisig_state, approver, proposal];
+        let (post_states, chained_calls) =
+            crate::approve::handle(&accounts, proposal_index);
+        Ok(LezOutput { post_states, chained_calls })
+    }
 
-        Instruction::Reject { proposal_index } => {
-            reject::handle(accounts, *proposal_index)
-        }
+    /// Reject an existing proposal.
+    /// rejector must be a member signer.
+    #[instruction]
+    pub fn reject(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        rejector: AccountWithMetadata,
+        #[account(mut)]
+        proposal: AccountWithMetadata,
+        proposal_index: u64,
+    ) -> LezResult {
+        let accounts = vec![multisig_state, rejector, proposal];
+        let (post_states, chained_calls) =
+            crate::reject::handle(&accounts, proposal_index);
+        Ok(LezOutput { post_states, chained_calls })
+    }
 
-        Instruction::Execute { proposal_index } => {
-            execute::handle(accounts, *proposal_index)
-        }
+    /// Execute a fully-approved proposal.
+    /// executor must be a member signer. target_accounts are the rest accounts.
+    #[instruction]
+    pub fn execute(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        executor: AccountWithMetadata,
+        #[account(mut)]
+        proposal: AccountWithMetadata,
+        target_accounts: Vec<AccountWithMetadata>,
+        proposal_index: u64,
+    ) -> LezResult {
+        let mut accounts = vec![multisig_state, executor, proposal];
+        accounts.extend(target_accounts);
+        let (post_states, chained_calls) =
+            crate::execute::handle(&accounts, proposal_index);
+        Ok(LezOutput { post_states, chained_calls })
+    }
 
-        Instruction::ProposeAddMember { new_member } => {
-            propose_config::handle(accounts, ConfigAction::AddMember { new_member: *new_member })
-        }
+    /// Propose adding a new member.
+    /// proposer must be a member signer. proposal is initialized.
+    #[instruction]
+    pub fn propose_add_member(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        proposer: AccountWithMetadata,
+        #[account(init)]
+        proposal: AccountWithMetadata,
+        new_member: [u8; 32],
+    ) -> LezResult {
+        let accounts = vec![multisig_state, proposer, proposal];
+        let (post_states, chained_calls) = crate::propose_config::handle(
+            &accounts,
+            ConfigAction::AddMember { new_member },
+        );
+        Ok(LezOutput { post_states, chained_calls })
+    }
 
-        Instruction::ProposeRemoveMember { member } => {
-            propose_config::handle(accounts, ConfigAction::RemoveMember { member: *member })
-        }
+    /// Propose removing a member.
+    /// proposer must be a member signer. proposal is initialized.
+    #[instruction]
+    pub fn propose_remove_member(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        proposer: AccountWithMetadata,
+        #[account(init)]
+        proposal: AccountWithMetadata,
+        member: [u8; 32],
+    ) -> LezResult {
+        let accounts = vec![multisig_state, proposer, proposal];
+        let (post_states, chained_calls) = crate::propose_config::handle(
+            &accounts,
+            ConfigAction::RemoveMember { member },
+        );
+        Ok(LezOutput { post_states, chained_calls })
+    }
 
-        Instruction::ProposeChangeThreshold { new_threshold } => {
-            propose_config::handle(accounts, ConfigAction::ChangeThreshold { new_threshold: *new_threshold })
-        }
+    /// Propose changing the threshold.
+    /// proposer must be a member signer. proposal is initialized.
+    #[instruction]
+    pub fn propose_change_threshold(
+        #[account(mut)]
+        multisig_state: AccountWithMetadata,
+        #[account(signer)]
+        proposer: AccountWithMetadata,
+        #[account(init)]
+        proposal: AccountWithMetadata,
+        new_threshold: u8,
+    ) -> LezResult {
+        let accounts = vec![multisig_state, proposer, proposal];
+        let (post_states, chained_calls) = crate::propose_config::handle(
+            &accounts,
+            ConfigAction::ChangeThreshold { new_threshold },
+        );
+        Ok(LezOutput { post_states, chained_calls })
+    }
+}
+
+// Legacy process() function for the existing guest binary.
+// The #[lez_program] macro generates main() and IDL, but the guest binary
+// (methods/guest/src/bin/multisig.rs) uses this for the risc0 entry point.
+pub fn process(
+    accounts: &[nssa_core::account::AccountWithMetadata],
+    instruction: &multisig_core::Instruction,
+) -> (Vec<nssa_core::program::AccountPostState>, Vec<nssa_core::program::ChainedCall>) {
+    use multisig_core::Instruction;
+    match instruction {
+        Instruction::CreateMultisig { create_key, threshold, members } =>
+            create_multisig::handle(accounts, create_key, *threshold, members),
+        Instruction::Propose { target_program_id, target_instruction_data, target_account_count, pda_seeds, authorized_indices } =>
+            propose::handle(accounts, target_program_id, target_instruction_data, *target_account_count, pda_seeds, authorized_indices),
+        Instruction::Approve { proposal_index } => approve::handle(accounts, *proposal_index),
+        Instruction::Reject { proposal_index } => reject::handle(accounts, *proposal_index),
+        Instruction::Execute { proposal_index } => execute::handle(accounts, *proposal_index),
+        Instruction::ProposeAddMember { new_member } =>
+            propose_config::handle(accounts, ConfigAction::AddMember { new_member: *new_member }),
+        Instruction::ProposeRemoveMember { member } =>
+            propose_config::handle(accounts, ConfigAction::RemoveMember { member: *member }),
+        Instruction::ProposeChangeThreshold { new_threshold } =>
+            propose_config::handle(accounts, ConfigAction::ChangeThreshold { new_threshold: *new_threshold }),
     }
 }

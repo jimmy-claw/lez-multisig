@@ -67,7 +67,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "amm_core"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "borsh",
  "nssa_core",
@@ -1056,7 +1056,7 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "anyhow",
  "base64",
@@ -2485,7 +2485,7 @@ dependencies = [
 [[package]]
 name = "key_protocol"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2542,6 +2542,41 @@ name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
+
+[[package]]
+name = "lez-framework"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/lez-framework.git?branch=jimmy%2Ffix-idl-instruction-type#8fba02b5df0976349745d0d5fb8bc1972d79f0d8"
+dependencies = [
+ "borsh",
+ "lez-framework-core",
+ "lez-framework-macros",
+ "nssa_core",
+]
+
+[[package]]
+name = "lez-framework-core"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/lez-framework.git?branch=jimmy%2Ffix-idl-instruction-type#8fba02b5df0976349745d0d5fb8bc1972d79f0d8"
+dependencies = [
+ "borsh",
+ "nssa_core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "lez-framework-macros"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/lez-framework.git?branch=jimmy%2Ffix-idl-instruction-type#8fba02b5df0976349745d0d5fb8bc1972d79f0d8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "sha2",
+ "syn 2.0.117",
+]
 
 [[package]]
 name = "lez-multisig-e2e"
@@ -3285,7 +3320,6 @@ dependencies = [
  "nssa_core",
  "risc0-zkvm",
  "serde",
- "serde_json",
  "tokio",
  "wallet",
 ]
@@ -3295,9 +3329,9 @@ name = "multisig-guest"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "lez-framework",
  "multisig_core",
  "multisig_program",
- "nssa-framework",
  "nssa_core",
  "risc0-zkvm",
  "serde_json",
@@ -3324,8 +3358,8 @@ name = "multisig_program"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "lez-framework",
  "multisig_core",
- "nssa-framework",
  "nssa_core",
  "risc0-zkvm",
  "serde",
@@ -3384,7 +3418,7 @@ dependencies = [
 [[package]]
 name = "nssa"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "borsh",
  "hex",
@@ -3401,42 +3435,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "nssa-framework"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
-dependencies = [
- "borsh",
- "nssa-framework-core",
- "nssa-framework-macros",
- "nssa_core",
-]
-
-[[package]]
-name = "nssa-framework-core"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "nssa-framework-macros"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "nssa_core"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "base58",
  "borsh",
@@ -3897,7 +3898,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -5137,7 +5138,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "token_core"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "borsh",
  "nssa_core",
@@ -5522,7 +5523,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "wallet"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
+source = "git+https://github.com/logos-blockchain/lssa.git?rev=767b5afd388c7981bcdf6f5b5c80159607e07e5b#767b5afd388c7981bcdf6f5b5c80159607e07e5b"
 dependencies = [
  "amm_core",
  "anyhow",

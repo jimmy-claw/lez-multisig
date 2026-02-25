@@ -1,6 +1,7 @@
 {
   "accounts": [],
   "errors": [],
+  "instruction_type": "multisig_core::Instruction",
   "instructions": [
     {
       "accounts": [
@@ -21,9 +22,9 @@
         {
           "init": false,
           "name": "member_accounts",
+          "rest": true,
           "signer": false,
-          "writable": false,
-          "rest": true
+          "writable": false
         }
       ],
       "args": [
@@ -78,12 +79,12 @@
       "args": [
         {
           "name": "target_program_id",
-          "type": "ProgramId"
+          "type": "program_id"
         },
         {
           "name": "target_instruction_data",
           "type": {
-            "vec": "u32"
+            "defined": "InstructionData"
           }
         },
         {
@@ -191,6 +192,7 @@
         {
           "init": false,
           "name": "target_accounts",
+          "rest": true,
           "signer": false,
           "writable": false
         }
@@ -202,10 +204,106 @@
         }
       ],
       "name": "execute"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "multisig_state",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": false,
+          "name": "proposer",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "init": true,
+          "name": "proposal",
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_member",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ],
+      "name": "propose_add_member"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "multisig_state",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": false,
+          "name": "proposer",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "init": true,
+          "name": "proposal",
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "member",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ],
+      "name": "propose_remove_member"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "multisig_state",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": false,
+          "name": "proposer",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "init": true,
+          "name": "proposal",
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_threshold",
+          "type": "u8"
+        }
+      ],
+      "name": "propose_change_threshold"
     }
   ],
   "name": "multisig_program",
   "types": [],
-  "version": "0.1.0",
-  "instruction_type": "multisig_core::Instruction"
+  "version": "0.1.0"
 }
