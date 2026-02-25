@@ -107,7 +107,10 @@ fn multisig_program_create_multisig_impl(args: &str) -> Result<String, String> {
 
     let create_key = hex_to_bytes_32(v["create_key"].as_str().ok_or("missing create_key")?)?;
     let threshold = v["threshold"].as_u64().ok_or("expected number")? as u8;
-    let members: Vec<AccountId> = v["members"].as_array().ok_or("expected array")?.iter().map(|item| parse_account_id(item.as_str().ok_or("member must be string")?)).collect::<Result<Vec<_>, String>>()?;
+    let members_bytes: Vec<[u8; 32]> = v["members"].as_array().ok_or("expected array")?.iter().map(|item| {
+        let s = item.as_str().ok_or("member must be string")?;
+        Ok(*parse_account_id(s)?.value())
+    }).collect::<Result<Vec<_>, String>>()?;
 
     let multisig_state = compute_pda(&[
         &create_key as &[u8],
@@ -115,14 +118,14 @@ fn multisig_program_create_multisig_impl(args: &str) -> Result<String, String> {
 
     let signer = parse_account_id(v["account"].as_str().ok_or("missing account")?)?;
     let mut account_ids: Vec<AccountId> = vec![multisig_state];
-    account_ids.extend(members.iter().cloned());
+    for mb in &members_bytes { account_ids.push(AccountId::new(*mb)); }
     account_ids.push(signer);
     let signer_ids: Vec<AccountId> = vec![signer];
 
     let instruction = ProgramInstruction::CreateMultisig {
         create_key,
         threshold,
-        members,
+        members: members_bytes,
     };
 
     let rt = tokio::runtime::Runtime::new().map_err(|e| format!("tokio: {}", e))?;

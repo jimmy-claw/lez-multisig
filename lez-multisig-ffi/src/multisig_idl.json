@@ -22,7 +22,8 @@
           "init": false,
           "name": "member_accounts",
           "signer": false,
-          "writable": false
+          "writable": false,
+          "rest": true
         }
       ],
       "args": [
