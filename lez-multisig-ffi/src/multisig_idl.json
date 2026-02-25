@@ -205,5 +205,6 @@
   ],
   "name": "multisig_program",
   "types": [],
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "instruction_type": "multisig_core::Instruction"
 }
