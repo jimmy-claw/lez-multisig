@@ -1,12 +1,23 @@
-//! Multisig operation implementations for the FFI layer.
+//! Auto-generated (IDL-driven) multisig FFI — DO NOT EDIT by hand.
 //!
-//! Each function takes a JSON args string and returns a JSON result string.
-//! Transaction building follows the same pattern as registry FFI.
+//! Generated via `lez-client-gen` from `multisig_idl.json` (issue #20).
+//! Transaction-building layer added manually on top of the generated skeleton,
+//! following the same `wallet::WalletCore` pattern as the original hand-written
+//! implementation.  See `lez-client-gen` `ffi_codegen.rs` for the skeleton.
 //!
-//! Common JSON input fields:
-//! - `sequencer_url`: e.g. "http://127.0.0.1:3040"
-//! - `wallet_path`:   path to the NSSA wallet directory (sets NSSA_WALLET_HOME_DIR)
-//! - `program_id_hex`: 64-char hex string identifying the multisig program binary
+//! # Account ordering (matches IDL exactly)
+//!
+//! | Instruction     | Accounts in order                                     |
+//! |-----------------|-------------------------------------------------------|
+//! | create_multisig | multisig_state (PDA), member_accounts... (rest)       |
+//! | propose         | multisig_state, proposer (signer), proposal (PDA)     |
+//! | approve         | multisig_state, approver (signer), proposal           |
+//! | reject          | multisig_state, rejector (signer), proposal           |
+//! | execute         | multisig_state, executor (signer), proposal,          |
+//! |                 |   target_accounts... (rest)                           |
+//!
+//! `list_proposals` and `get_state` are read-only helpers not in the IDL;
+//! they are hand-written and preserved from the original implementation.
 
 use nssa::{
     AccountId, PublicTransaction,
@@ -20,7 +31,7 @@ use serde_json::{Value, json};
 use wallet::WalletCore;
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Shared helpers (unchanged from hand-written version)
 // ---------------------------------------------------------------------------
 
 fn parse_args(args: &str) -> Result<Value, String> {
@@ -31,7 +42,7 @@ fn get_str<'a>(v: &'a Value, key: &str) -> Result<&'a str, String> {
     v[key].as_str().ok_or_else(|| format!("missing field '{}'", key))
 }
 
-/// Parse a 64-hex-char program_id string into [u32; 8] (big-endian words).
+/// Parse a 64-hex-char program_id string into [u32; 8] (little-endian words).
 fn parse_program_id_hex(s: &str) -> Result<nssa::ProgramId, String> {
     let s = s.trim_start_matches("0x");
     if s.len() != 64 {
@@ -48,7 +59,6 @@ fn parse_program_id_hex(s: &str) -> Result<nssa::ProgramId, String> {
 /// Parse a 32-byte key from hex (64 chars) or base58.
 fn parse_hex32(s: &str, field: &str) -> Result<[u8; 32], String> {
     let s = s.trim_start_matches("0x");
-    // Try hex first (64 chars)
     if s.len() == 64 {
         if let Ok(bytes) = hex::decode(s) {
             let mut arr = [0u8; 32];
@@ -56,7 +66,6 @@ fn parse_hex32(s: &str, field: &str) -> Result<[u8; 32], String> {
             return Ok(arr);
         }
     }
-    // Try base58
     match bs58::decode(s).into_vec() {
         Ok(bytes) if bytes.len() == 32 => {
             let mut arr = [0u8; 32];
@@ -65,6 +74,21 @@ fn parse_hex32(s: &str, field: &str) -> Result<[u8; 32], String> {
         }
         Ok(bytes) => Err(format!("{}: base58 decoded to {} bytes, expected 32", field, bytes.len())),
         Err(_) => Err(format!("{} must be 64 hex chars or valid base58 (got len {})", field, s.len())),
+    }
+}
+
+/// Parse an AccountId from base58 or hex string.
+fn parse_account_id(s: &str, field: &str) -> Result<AccountId, String> {
+    if let Ok(id) = s.parse::<AccountId>() {
+        return Ok(id);
+    }
+    // Fall back to hex → bytes → AccountId
+    match parse_hex32(s, field) {
+        Ok(b) => {
+            let b58 = bs58::encode(b).into_string();
+            b58.parse::<AccountId>().map_err(|e| format!("invalid {}: {}", field, e))
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -77,13 +101,10 @@ async fn submit_and_wait(
         .send_tx_public(tx)
         .await
         .map_err(|e| format!("failed to submit transaction: {}", e))?;
-
     Ok(response.tx_hash.to_string())
 }
 
-
 /// Verify that a transaction was included by checking the resulting account state.
-/// Retries a few times with delays to account for sequencer processing time.
 async fn verify_account_exists(
     wallet_core: &WalletCore,
     account_id: AccountId,
@@ -105,6 +126,7 @@ async fn verify_account_exists(
     }
     Ok(false)
 }
+
 /// Build + submit a signed transaction for a multisig instruction.
 async fn submit_signed_multisig_tx(
     wallet_core: &WalletCore,
@@ -162,7 +184,6 @@ fn load_wallet(wallet_path: Option<&str>) -> Result<WalletCore, String> {
     WalletCore::from_env().map_err(|e| format!("failed to load wallet: {}", e))
 }
 
-/// Serialize ProposalStatus to string.
 fn status_str(status: &ProposalStatus) -> &'static str {
     match status {
         ProposalStatus::Active    => "Active",
@@ -172,12 +193,10 @@ fn status_str(status: &ProposalStatus) -> &'static str {
     }
 }
 
-/// Serialize a [u8;32] to hex string.
 fn bytes32_to_hex(b: &[u8; 32]) -> String {
     hex::encode(b)
 }
 
-/// Serialize a ProgramId ([u32;8]) to hex string.
 fn program_id_to_hex(pid: &nssa::ProgramId) -> String {
     pid.iter()
         .flat_map(|w| w.to_be_bytes())
@@ -186,7 +205,10 @@ fn program_id_to_hex(pid: &nssa::ProgramId) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// IDL-derived: create_multisig
+//
+// IDL accounts: [multisig_state (PDA, init), member_accounts (rest)]
+// IDL args:     create_key: [u8;32], threshold: u8, members: Vec<[u8;32]>
 // ---------------------------------------------------------------------------
 
 /// Create a new multisig.
@@ -200,7 +222,7 @@ fn program_id_to_hex(pid: &nssa::ProgramId) -> String {
 ///   "account":             "<signer AccountId>",
 ///   "create_key":          "(64 hex chars — unique key for this multisig)",
 ///   "threshold":           2,
-///   "members":             ["(64 hex — member AccountId bytes)", ...]
+///   "members":             ["(64 hex or base58 — member AccountId)", ...]
 /// }
 /// ```
 pub fn create(args: &str) -> String {
@@ -208,12 +230,10 @@ pub fn create(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { create_async(&v).await })
 }
 
@@ -227,7 +247,7 @@ async fn create_async(v: &Value) -> String {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-    let account_hex = match get_str(v, "account") {
+    let account_str = match get_str(v, "account") {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
@@ -244,13 +264,11 @@ async fn create_async(v: &Value) -> String {
         Ok(id) => id,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let create_key = match parse_hex32(create_key_hex, "create_key") {
         Ok(k) => k,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    // Parse members array
     let members_json = match v["members"].as_array() {
         Some(a) => a,
         None => return json!({"success": false, "error": "missing 'members' array"}).to_string(),
@@ -268,37 +286,25 @@ async fn create_async(v: &Value) -> String {
     }
 
     std::env::set_var("NSSA_SEQUENCER_URL", &sequencer_url);
-
     let wallet_core = match load_wallet(wallet_path) {
         Ok(w) => w,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
+    let signer_id = match parse_account_id(account_str, "account") {
         Ok(id) => id,
-        Err(_) => {
-            // Try as hex -> bytes -> base58
-            match parse_hex32(account_hex, "account") {
-                Ok(b) => match bs58::encode(b).into_string().parse() {
-                    Ok(id) => id,
-                    Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
-                },
-                Err(e) => return json!({"success": false, "error": e}).to_string(),
-            }
-        }
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
+    // IDL account order: multisig_state (PDA), then member_accounts (rest)
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
-
-    // Program expects: [multisig_state_pda, member_account_1, member_account_2, ...]
     let mut account_ids = vec![multisig_state_pda];
     for member_bytes in members.iter() {
         let member_b58 = bs58::encode(member_bytes).into_string();
-        let member_id: AccountId = match member_b58.parse() {
-            Ok(id) => id,
+        match member_b58.parse::<AccountId>() {
+            Ok(id) => account_ids.push(id),
             Err(e) => return json!({"success": false, "error": format!("invalid member account id: {}", e)}).to_string(),
-        };
-        account_ids.push(member_id);
+        }
     }
 
     let instruction = Instruction::CreateMultisig {
@@ -315,7 +321,6 @@ async fn create_async(v: &Value) -> String {
         instruction,
     ).await {
         Ok(tx_hash) => {
-            // Verify the multisig state PDA was actually created on-chain
             match verify_account_exists(&wallet_core, multisig_state_pda, 5).await {
                 Ok(true) => json!({
                     "success": true,
@@ -340,6 +345,14 @@ async fn create_async(v: &Value) -> String {
     }
 }
 
+// ---------------------------------------------------------------------------
+// IDL-derived: propose
+//
+// IDL accounts: [multisig_state, proposer (signer), proposal (PDA, init)]
+// IDL args:     target_program_id, target_instruction_data, target_account_count,
+//               pda_seeds, authorized_indices
+// ---------------------------------------------------------------------------
+
 /// Create a new proposal in a multisig.
 ///
 /// Args JSON:
@@ -362,12 +375,10 @@ pub fn propose(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { propose_async(&v).await })
 }
 
@@ -381,7 +392,7 @@ async fn propose_async(v: &Value) -> String {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-    let account_hex = match get_str(v, "account") {
+    let account_str = match get_str(v, "account") {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
@@ -420,7 +431,6 @@ async fn propose_async(v: &Value) -> String {
         Err(e) => return json!({"success": false, "error": format!("invalid hex in target_instruction_data: {}", e)}).to_string(),
     };
 
-    // Parse pda_seeds array
     let mut pda_seeds: Vec<[u8; 32]> = Vec::new();
     if let Some(seeds_arr) = v["pda_seeds"].as_array() {
         for (i, s) in seeds_arr.iter().enumerate() {
@@ -435,7 +445,6 @@ async fn propose_async(v: &Value) -> String {
         }
     }
 
-    // Parse authorized_indices
     let mut authorized_indices: Vec<u8> = Vec::new();
     if let Some(indices_arr) = v["authorized_indices"].as_array() {
         for (i, idx) in indices_arr.iter().enumerate() {
@@ -447,24 +456,14 @@ async fn propose_async(v: &Value) -> String {
     }
 
     std::env::set_var("NSSA_SEQUENCER_URL", &sequencer_url);
-
     let wallet_core = match load_wallet(wallet_path) {
         Ok(w) => w,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
+    let signer_id = match parse_account_id(account_str, "account") {
         Ok(id) => id,
-        Err(_) => {
-            // Try as hex -> bytes -> base58
-            match parse_hex32(account_hex, "account") {
-                Ok(b) => match bs58::encode(b).into_string().parse() {
-                    Ok(id) => id,
-                    Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
-                },
-                Err(e) => return json!({"success": false, "error": e}).to_string(),
-            }
-        }
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
@@ -479,15 +478,23 @@ async fn propose_async(v: &Value) -> String {
     let next_index = state.transaction_index + 1;
     let proposal_pda = compute_proposal_pda(&multisig_program_id, &create_key, next_index);
 
+    // IDL account order: multisig_state, proposer (signer), proposal (PDA)
+    let account_ids = vec![multisig_state_pda, signer_id, proposal_pda];
+
     let instruction = Instruction::Propose {
         target_program_id,
-        target_instruction_data: target_instruction_data.chunks(4).map(|c| { let mut buf = [0u8; 4]; buf[..c.len()].copy_from_slice(c); u32::from_le_bytes(buf) }).collect(),
+        target_instruction_data: target_instruction_data
+            .chunks(4)
+            .map(|c| {
+                let mut buf = [0u8; 4];
+                buf[..c.len()].copy_from_slice(c);
+                u32::from_le_bytes(buf)
+            })
+            .collect(),
         target_account_count,
         pda_seeds,
         authorized_indices,
     };
-
-    let account_ids = vec![multisig_state_pda, proposal_pda, signer_id];
 
     match submit_signed_multisig_tx(
         &wallet_core,
@@ -497,7 +504,6 @@ async fn propose_async(v: &Value) -> String {
         instruction,
     ).await {
         Ok(tx_hash) => {
-            // Verify the proposal PDA was created on-chain
             match verify_account_exists(&wallet_core, proposal_pda, 5).await {
                 Ok(true) => json!({
                     "success": true,
@@ -522,6 +528,14 @@ async fn propose_async(v: &Value) -> String {
     }
 }
 
+// ---------------------------------------------------------------------------
+// IDL-derived: approve / reject
+//
+// IDL accounts (approve): [multisig_state, approver (signer), proposal]
+// IDL accounts (reject):  [multisig_state, rejector (signer), proposal]
+// IDL args: proposal_index: u64
+// ---------------------------------------------------------------------------
+
 /// Approve an existing proposal.
 ///
 /// Args JSON:
@@ -540,12 +554,10 @@ pub fn approve(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { vote_async(&v, true).await })
 }
 
@@ -555,12 +567,10 @@ pub fn reject(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { vote_async(&v, false).await })
 }
 
@@ -574,7 +584,7 @@ async fn vote_async(v: &Value, is_approve: bool) -> String {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-    let account_hex = match get_str(v, "account") {
+    let account_str = match get_str(v, "account") {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
@@ -597,36 +607,28 @@ async fn vote_async(v: &Value, is_approve: bool) -> String {
     };
 
     std::env::set_var("NSSA_SEQUENCER_URL", &sequencer_url);
-
     let wallet_core = match load_wallet(wallet_path) {
         Ok(w) => w,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
+    let signer_id = match parse_account_id(account_str, "account") {
         Ok(id) => id,
-        Err(_) => {
-            // Try as hex -> bytes -> base58
-            match parse_hex32(account_hex, "account") {
-                Ok(b) => match bs58::encode(b).into_string().parse() {
-                    Ok(id) => id,
-                    Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
-                },
-                Err(e) => return json!({"success": false, "error": e}).to_string(),
-            }
-        }
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
     let proposal_pda = compute_proposal_pda(&multisig_program_id, &create_key, proposal_index);
+
+    // IDL account order for approve: [multisig_state, approver, proposal]
+    // IDL account order for reject:  [multisig_state, rejector, proposal]
+    let account_ids = vec![multisig_state_pda, signer_id, proposal_pda];
 
     let instruction = if is_approve {
         Instruction::Approve { proposal_index }
     } else {
         Instruction::Reject { proposal_index }
     };
-
-    let account_ids = vec![multisig_state_pda, signer_id, proposal_pda];
 
     match submit_signed_multisig_tx(
         &wallet_core,
@@ -644,6 +646,13 @@ async fn vote_async(v: &Value, is_approve: bool) -> String {
         Err(e) => json!({"success": false, "error": e}).to_string(),
     }
 }
+
+// ---------------------------------------------------------------------------
+// IDL-derived: execute
+//
+// IDL accounts: [multisig_state, executor (signer), proposal, target_accounts (rest)]
+// IDL args: proposal_index: u64
+// ---------------------------------------------------------------------------
 
 /// Execute a fully-approved proposal.
 ///
@@ -663,12 +672,10 @@ pub fn execute(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { execute_async(&v).await })
 }
 
@@ -682,7 +689,7 @@ async fn execute_async(v: &Value) -> String {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-    let account_hex = match get_str(v, "account") {
+    let account_str = match get_str(v, "account") {
         Ok(s) => s,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
@@ -705,32 +712,25 @@ async fn execute_async(v: &Value) -> String {
     };
 
     std::env::set_var("NSSA_SEQUENCER_URL", &sequencer_url);
-
     let wallet_core = match load_wallet(wallet_path) {
         Ok(w) => w,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
-    let signer_id: AccountId = match account_hex.parse() {
+    let signer_id = match parse_account_id(account_str, "account") {
         Ok(id) => id,
-        Err(_) => {
-            // Try as hex -> bytes -> base58
-            match parse_hex32(account_hex, "account") {
-                Ok(b) => match bs58::encode(b).into_string().parse() {
-                    Ok(id) => id,
-                    Err(e) => return json!({"success": false, "error": format!("invalid account id: {}", e)}).to_string(),
-                },
-                Err(e) => return json!({"success": false, "error": e}).to_string(),
-            }
-        }
+        Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
     let proposal_pda = compute_proposal_pda(&multisig_program_id, &create_key, proposal_index);
 
-    let instruction = Instruction::Execute { proposal_index };
-
+    // IDL account order: [multisig_state, executor, proposal, target_accounts (rest)]
+    // For the FFI call we only know the fixed accounts; target_accounts are
+    // resolved on-chain from the proposal's stored data.
     let account_ids = vec![multisig_state_pda, signer_id, proposal_pda];
+
+    let instruction = Instruction::Execute { proposal_index };
 
     match submit_signed_multisig_tx(
         &wallet_core,
@@ -748,6 +748,10 @@ async fn execute_async(v: &Value) -> String {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Read-only helpers (not in IDL — hand-written, preserved from original)
+// ---------------------------------------------------------------------------
+
 /// List proposals for a multisig (reads PDAs for indices 1..transaction_index).
 ///
 /// Args JSON:
@@ -764,12 +768,10 @@ pub fn list_proposals(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { list_proposals_async(&v).await })
 }
 
@@ -798,14 +800,12 @@ async fn list_proposals_async(v: &Value) -> String {
     };
 
     std::env::set_var("NSSA_SEQUENCER_URL", &sequencer_url);
-
     let wallet_core = match load_wallet(wallet_path) {
         Ok(w) => w,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
 
     let multisig_state_pda = compute_multisig_state_pda(&multisig_program_id, &create_key);
-
     let state = match fetch_borsh_account::<MultisigState>(&wallet_core, multisig_state_pda).await {
         Ok(Some(s)) => s,
         Ok(None) => return json!({
@@ -817,7 +817,6 @@ async fn list_proposals_async(v: &Value) -> String {
     };
 
     let mut proposals_json = Vec::new();
-
     for idx in 1..=state.transaction_index {
         let proposal_pda = compute_proposal_pda(&multisig_program_id, &create_key, idx);
         match fetch_borsh_account::<Proposal>(&wallet_core, proposal_pda).await {
@@ -835,16 +834,13 @@ async fn list_proposals_async(v: &Value) -> String {
                 }));
             }
             Ok(None) => {
-                // Missing proposal — include stub
                 proposals_json.push(json!({
                     "index": idx,
                     "status": "Missing",
                     "proposal_pda": proposal_pda.to_string(),
                 }));
             }
-            Err(_) => {
-                // Skip unreadable proposals
-            }
+            Err(_) => {}
         }
     }
 
@@ -872,12 +868,10 @@ pub fn get_state(args: &str) -> String {
         Ok(v) => v,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
     };
-
     let rt = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
         Err(e) => return json!({"success": false, "error": format!("runtime error: {}", e)}).to_string(),
     };
-
     rt.block_on(async { get_state_async(&v).await })
 }
 
@@ -906,7 +900,6 @@ async fn get_state_async(v: &Value) -> String {
     };
 
     std::env::set_var("NSSA_SEQUENCER_URL", &sequencer_url);
-
     let wallet_core = match load_wallet(wallet_path) {
         Ok(w) => w,
         Err(e) => return json!({"success": false, "error": e}).to_string(),
