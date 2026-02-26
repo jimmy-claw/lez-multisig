@@ -22,10 +22,10 @@
 - **F2.4**: Execution delegates via NSSA `ChainedCall` to the target program — the multisig never modifies external state directly
 - **F2.5**: Support native token (λ) transfers via ChainedCall to token program
 
-### F3. Member Management *(not yet implemented — post-PoC)*
-- **F3.1**: Add member (requires M current signatures)
-- **F3.2**: Remove member (requires M current signatures)
-- **F3.3**: Change threshold (requires M current signatures, must satisfy 1 ≤ M ≤ N)
+### F3. Member Management ✅
+- **F3.1**: Add member (requires M current signatures) ✅
+- **F3.2**: Remove member (requires M current signatures, threshold guard: rejects if N-1 < M) ✅
+- **F3.3**: Change threshold (requires M current signatures, must satisfy 1 ≤ M ≤ N) ✅
 
 ---
 
