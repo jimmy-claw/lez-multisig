@@ -15,7 +15,7 @@ Updated: 2026-02-23
 | Auto-reject when dead | ✅ Implemented | Reject handler handles it |
 | Member claiming workaround | ✅ Implemented | Documented in README |
 | CLI commands | ✅ Updated | 3-account layout + proposal PDA flow |
-| Member management (Add/Remove/ChangeThreshold) | ❌ Not implemented | Deferred to v0.2 |
+| Member management (Add/Remove/ChangeThreshold) | ✅ Implemented | Full in v0.1 |
 | Unit tests | ✅ Complete | All instruction handlers covered |
 | E2E test (full flow) | ✅ Implemented | `e2e_tests/` covers full flow |
 | README accuracy | ✅ Accurate | |
@@ -46,13 +46,13 @@ Updated: 2026-02-23
 | F2.4: Delegation via ChainedCall | ✅ | Multisig never modifies external state directly |
 | F2.5: Native token (λ) transfers | ✅ | Via ChainedCall to token program |
 
-### F3 — Member Management (v0.2)
+### F3 — Member Management ✅
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| F3.1: Add member (M sigs required) | ❌ | Deferred — design in SPEC |
-| F3.2: Remove member (M sigs required) | ❌ | Deferred |
-| F3.3: Change threshold (1≤M≤N guard) | ❌ | Deferred |
+| F3.1: Add member (M sigs required) | ✅ | Implemented |
+| F3.2: Remove member (M sigs required, N-1≥M guard) | ✅ | Implemented |
+| F3.3: Change threshold (1≤M≤N guard) | ✅ | Implemented |
 
 ### U1 — CLI Commands
 
@@ -64,8 +64,8 @@ Updated: 2026-02-23
 | `multisig approve` | ✅ | |
 | `multisig reject` | ✅ | |
 | `multisig execute` | ✅ | |
-| `multisig add-member` | ❌ | Needs F3 (v0.2) |
-| `multisig remove-member` | ❌ | Needs F3 (v0.2) |
+| `multisig add-member` | ✅ | Implemented |
+| `multisig remove-member` | ✅ | Implemented |
 
 ### R — Reliability
 
@@ -113,7 +113,7 @@ All account layouts, PDA derivation formulas, and instruction logic in the code 
 ## Remaining Gaps (v0.2 Scope)
 
 ### Feature Gaps
-1. **Member management**: AddMember, RemoveMember, ChangeThreshold (F3)
+1. ~~**Member management**: AddMember, RemoveMember, ChangeThreshold (F3)~~ ✅ Done
 2. **CloseProposal**: Reclaim storage from executed/rejected proposals
 3. **Time-lock**: Optional delay between threshold reached and execution
 4. **Messaging integration**: In-band signing requests via Logos Messaging / Waku
