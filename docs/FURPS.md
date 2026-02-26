@@ -1,6 +1,6 @@
 # Multisig PoC — FURPS Specification
 
-> **Status:** Draft — 2026-02-16 (updated 2026-02-21)
+> **Status:** v0.1 Complete — 2026-02-26
 > **Scope:** Public mode only, basic M-of-N threshold
 > **Target:** LEZ Testnet
 
@@ -31,7 +31,7 @@
 
 ## Usability (U)
 
-### U1. CLI Commands *(partially implemented — needs update for proposal PDA flow)*
+### U1. CLI Commands 
 ```
 # Create 2-of-3 multisig
 lez-wallet multisig create --threshold 2 --member <pk1> --member <pk2> --member <pk3>
@@ -113,7 +113,5 @@ Due to NSSA runtime validation rules, member accounts must be **fresh keypairs**
 
 ## Known Limitations (PoC Scope)
 
-- Member management (F3) not yet implemented
-- CLI needs update for proposal PDA flow
 - No `CloseProposal` to reclaim executed/rejected proposal storage
 - No time-lock between threshold reached and execution
