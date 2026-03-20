@@ -223,7 +223,7 @@ run "wallet deploy-program multisig.bin"
 
 echo ""
 # Grab program IDs for use in later steps (must be before poll)
-# Decimal format (comma-separated u32) — used by lez-cli --target-program-id (parses as LE)
+# Decimal format (comma-separated u32) — used by spel-cli --target-program-id (parses as LE)
 TOKEN_PROGRAM_ID=$("$MULTISIG_CLI" --idl "$IDL" inspect "$TOKEN_BIN" \
   | grep 'ProgramId (decimal)' | awk '{print $NF}')
 REGISTRY_PROGRAM_ID=$("$MULTISIG_CLI" --idl "$IDL" inspect "$REGISTRY_BIN" \

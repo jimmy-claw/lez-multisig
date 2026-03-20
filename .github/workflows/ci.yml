@@ -26,12 +26,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install lez-client-gen
+      - name: Install spel-client-gen
         run: |
           cargo install \
-            --git https://github.com/jimmy-claw/lez-framework.git \
-            --branch main \
-            lez-client-gen \
+            --git https://github.com/jimmy-claw/spel.git \
+            --branch jimmy/issue-57 \
+            spel-client-gen \
             --locked
 
       - name: Generate IDL from Rust annotations
@@ -41,10 +41,10 @@ jobs:
 
       - name: Generate FFI client from IDL
         run: |
-          mkdir -p /tmp/lez-ffi-gen
-          lez-client-gen --idl lez-multisig-ffi/src/multisig_idl.json --out-dir /tmp/lez-ffi-gen
+          mkdir -p /tmp/spel-ffi-gen
+          spel-client-gen --idl lez-multisig-ffi/src/multisig_idl.json --out-dir /tmp/spel-ffi-gen
           echo '// GENERATED FILE — do not edit manually. Run make generate to regenerate.' > lez-multisig-ffi/src/multisig.rs
-          cat /tmp/lez-ffi-gen/multisig_program_ffi.rs >> lez-multisig-ffi/src/multisig.rs
+          cat /tmp/spel-ffi-gen/multisig_program_ffi.rs >> lez-multisig-ffi/src/multisig.rs
           echo "✅ FFI client generated"
 
       - name: Run unit tests

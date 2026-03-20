@@ -32,7 +32,7 @@ lez-multisig-framework/
 │       ├── reject.rs
 │       └── execute.rs
 ├── methods/                 — risc0 zkVM guest build config
-├── cli/                     — thin CLI wrapper around lez-cli (IDL-driven)
+├── cli/                     — thin CLI wrapper around spel-cli (IDL-driven)
 ├── idl-gen/                 — IDL generator (host-side, no risc0)
 ├── lez-multisig-ffi/        — FFI client + generated IDL
 ├── e2e_tests/               — integration tests against live sequencer
@@ -137,7 +137,7 @@ multisig --idl multisig_idl.json --program-id <HEX> pda multisig-state --create-
 
 ## CLI
 
-The `cli/` crate wraps [`lez-cli`](https://github.com/jimmy-claw/lez-framework), which auto-generates subcommands from the multisig IDL. All flags are derived from the IDL — no hardcoded commands.
+The `cli/` crate wraps [`spel-cli`](https://github.com/logos-co/spel), which auto-generates subcommands from the multisig IDL. All flags are derived from the IDL — no hardcoded commands.
 
 ```bash
 # Build the CLI
@@ -188,7 +188,7 @@ The multisig can govern **any LEZ program** via ChainedCall. The proposal stores
 - `target_account_count` — how many accounts the ChainedCall needs
 - `pda_seeds` — seeds for PDA accounts the multisig owns (e.g. vault)
 
-This means you can use lez-cli with any program's IDL to generate the instruction bytes, then wrap them in a multisig proposal — without writing any code.
+This means you can use spel-cli with any program's IDL to generate the instruction bytes, then wrap them in a multisig proposal — without writing any code.
 
 ## Known Issues
 
@@ -200,7 +200,7 @@ This means you can use lez-cli with any program's IDL to generate the instructio
 - [Technical Specification (SPEC.md)](SPEC.md)
 - [Demo Runbook (scripts/DEMO-RUNBOOK.md)](scripts/DEMO-RUNBOOK.md)
 - [FURPS Requirements (docs/FURPS.md)](docs/FURPS.md)
-- [LEZ Framework](https://github.com/jimmy-claw/lez-framework)
+- [SPEL Framework](https://github.com/logos-co/spel)
 - [LEZ Registry](https://github.com/jimmy-claw/lez-registry)
 - [LSSA (LEZ runtime)](https://github.com/logos-blockchain/lssa)
 - [Squads Protocol v4](https://squads.so/) — design inspiration

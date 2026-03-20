@@ -14,7 +14,7 @@ lez-multisig-ffi/src/multisig_idl.json   ← GENERATED, do not edit
         │  (cargo run --bin generate_idl)
         ▼
 lez-multisig-ffi/src/multisig.rs          ← GENERATED, do not edit
-        │  (lez-client-gen)
+        │  (spel-client-gen)
         ▼
 C FFI library (liblez_multisig_ffi.so)
 ```
@@ -68,7 +68,7 @@ PDA derivation is expressed in the Rust source via `#[account(...)]` attributes:
 #[account(init, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
 ```
 
-The macro generates the IDL's `pda.seeds` array, and `lez-client-gen` turns that into:
+The macro generates the IDL's `pda.seeds` array, and `spel-client-gen` turns that into:
 - A `compute_{account}_pda(...)` helper function in the generated FFI
 - Automatic PDA resolution in the `{instruction}_impl` FFI functions
 
@@ -88,11 +88,11 @@ The macro generates the IDL's `pda.seeds` array, and `lez-client-gen` turns that
 - PR titles should mention the annotation change (not the generated output)
 - Run `cargo check` before pushing — CI will also check
 
-## Dependency on lez-framework
+## Dependency on spel-framework
 
-The `generate_idl` binary and `lez-client-gen` both come from the `lez-framework` git dependency:
+The `generate_idl` binary and `spel-client-gen` both come from the `spel` git dependency:
 
-- IDL generation: `lez_framework::generate_idl!` macro in `methods/guest/src/bin/generate_idl.rs`
-- FFI generation: `lez-client-gen` crate from the same lez-framework repo
+- IDL generation: `spel_framework::generate_idl!` macro in `methods/guest/src/bin/generate_idl.rs`
+- FFI generation: `spel-client-gen` crate from the same spel repo
 
-When lez-framework is updated (e.g. new PDA seed types), update the `branch = "main"` dep and re-run `make generate`.
+When spel-framework is updated (e.g. new PDA seed types), update the `branch = "main"` dep and re-run `make generate`.

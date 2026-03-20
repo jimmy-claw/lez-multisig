@@ -2535,94 +2535,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
-name = "lez-cli"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7#eed4ad7bbda2322a5972497caec14f9a1f191d96"
-dependencies = [
- "base58",
- "borsh",
- "bytemuck",
- "lez-framework-core 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7)",
- "nssa",
- "nssa_core",
- "risc0-zkvm",
- "serde",
- "serde_json",
- "tokio",
- "wallet",
-]
-
-[[package]]
-name = "lez-framework"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?branch=main#8a276a531104a5b3f00bf8dd3edf74c7ef715a1c"
-dependencies = [
- "borsh",
- "lez-framework-core 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?branch=main)",
- "lez-framework-macros 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?branch=main)",
- "nssa_core",
-]
-
-[[package]]
-name = "lez-framework"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7#eed4ad7bbda2322a5972497caec14f9a1f191d96"
-dependencies = [
- "borsh",
- "lez-framework-core 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7)",
- "lez-framework-macros 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7)",
- "nssa_core",
-]
-
-[[package]]
-name = "lez-framework-core"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?branch=main#8a276a531104a5b3f00bf8dd3edf74c7ef715a1c"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "lez-framework-core"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7#eed4ad7bbda2322a5972497caec14f9a1f191d96"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "lez-framework-macros"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?branch=main#8a276a531104a5b3f00bf8dd3edf74c7ef715a1c"
-dependencies = [
- "proc-macro2",
- "quote",
- "sha2",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "lez-framework-macros"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7#eed4ad7bbda2322a5972497caec14f9a1f191d96"
-dependencies = [
- "proc-macro2",
- "quote",
- "sha2",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "lez-multisig-e2e"
 version = "0.1.0"
 dependencies = [
@@ -2661,9 +2573,9 @@ dependencies = [
 name = "lez-multisig-idl-gen"
 version = "0.1.0"
 dependencies = [
- "lez-framework 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?branch=main)",
  "multisig_program",
  "serde_json",
+ "spel-framework",
 ]
 
 [[package]]
@@ -3365,7 +3277,7 @@ dependencies = [
 name = "multisig-cli"
 version = "0.1.0"
 dependencies = [
- "lez-cli",
+ "spel-cli",
  "tokio",
 ]
 
@@ -3374,12 +3286,12 @@ name = "multisig-guest"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "lez-framework 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?branch=main)",
  "multisig_core",
  "multisig_program",
  "nssa_core",
  "risc0-zkvm",
  "serde_json",
+ "spel-framework",
 ]
 
 [[package]]
@@ -3404,11 +3316,11 @@ name = "multisig_program"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "lez-framework 0.1.0 (git+https://github.com/jimmy-claw/lez-framework.git?rev=eed4ad7)",
  "multisig_core",
  "nssa_core",
  "risc0-zkvm",
  "serde",
+ "spel-framework",
 ]
 
 [[package]]
@@ -4918,6 +4830,59 @@ checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
 dependencies = [
  "libc",
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "spel-cli"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/spel.git?branch=jimmy%2Fissue-57#20a8abd157ba57fb9ead32373412107f41198bbf"
+dependencies = [
+ "base58",
+ "borsh",
+ "nssa",
+ "nssa_core",
+ "risc0-zkvm",
+ "serde",
+ "serde_json",
+ "spel-framework-core",
+ "tokio",
+ "wallet",
+]
+
+[[package]]
+name = "spel-framework"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/spel.git?branch=jimmy%2Fissue-57#20a8abd157ba57fb9ead32373412107f41198bbf"
+dependencies = [
+ "borsh",
+ "nssa_core",
+ "spel-framework-core",
+ "spel-framework-macros",
+]
+
+[[package]]
+name = "spel-framework-core"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/spel.git?branch=jimmy%2Fissue-57#20a8abd157ba57fb9ead32373412107f41198bbf"
+dependencies = [
+ "borsh",
+ "nssa_core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "syn 2.0.117",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "spel-framework-macros"
+version = "0.1.0"
+source = "git+https://github.com/jimmy-claw/spel.git?branch=jimmy%2Fissue-57#20a8abd157ba57fb9ead32373412107f41198bbf"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "sha2",
+ "syn 2.0.117",
 ]
 
 [[package]]

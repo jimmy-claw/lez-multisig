@@ -48,7 +48,7 @@ sleep 10  # wait for deploy txs to land
 ## 2. Capture program IDs
 
 ```bash
-# Decimal CSV format — required for lez-cli --target-program-id
+# Decimal CSV format — required for spel-cli --target-program-id
 TOKEN_PROGRAM_ID=$($MULTISIG --idl $IDL inspect $TOKEN_BIN \
   | grep 'ProgramId (decimal)' | awk '{print $NF}')
 REGISTRY_PROGRAM_ID=$($MULTISIG --idl $IDL inspect $REGISTRY_BIN \
@@ -344,6 +344,6 @@ $REGISTRY info \
 - If tx fails: check seq.log for `InvalidProgramBehavior` or `ProgramExecutionFailed`
 - Rebuild wallet+sequencer together from same lssa rev if "Unknown program" appears
 - `make generate-idl` after any source change to `multisig_program/src/lib.rs`
-- ProgramId formats: lez-cli uses decimal CSV, registry CLI uses 64-char hex
-- Vault PDA must be computed with Python LE formula (see 10b) — not `lez-cli pda`
+- ProgramId formats: spel-cli uses decimal CSV, registry CLI uses 64-char hex
+- Vault PDA must be computed with Python LE formula (see 10b) — not `spel-cli pda`
 - Rest accounts: comma-separated in single flag, e.g. `--target-accounts-account "addr1,addr2"`

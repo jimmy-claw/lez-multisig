@@ -1,7 +1,7 @@
 //! lez-multisig-ffi — C FFI wrapper for the LEZ Multisig program.
 //!
 //! The bulk of the implementation lives in `multisig.rs`, which is generated
-//! by lez-client-gen from `multisig_idl.json`.  This file re-exports the
+//! by spel-client-gen from `multisig_idl.json`.  This file re-exports the
 //! generated extern "C" symbols under the canonical `lez_multisig_*` names
 //! and adds read-only query helpers not covered by the IDL.
 
