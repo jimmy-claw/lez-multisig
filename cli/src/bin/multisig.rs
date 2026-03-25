@@ -5,7 +5,7 @@ use nssa::{
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
-use nssa_core::NullifierPublicKey;
+use nssa_core::{NullifierPublicKey, NullifierSecretKey};
 use multisig_core::{
     Instruction,
     compute_multisig_state_pda,
@@ -57,9 +57,12 @@ enum Commands {
         /// Multisig create_key (base58)
         #[arg(long)]
         multisig: String,
-        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
-        #[arg(long)]
-        nsk: String,
+        /// Your nullifier secret key (hex, 64 chars). Provide either --account or --nsk.
+        #[arg(long, conflicts_with = "account")]
+        nsk: Option<String>,
+        /// Your private wallet account (e.g. Private/xxx). Resolves NSK from wallet keystore.
+        #[arg(long, conflicts_with = "nsk")]
+        account: Option<String>,
         /// Member NPKs (hex). Required until on-chain state fetching is implemented.
         #[arg(long, num_args = 1..)]
         members: Vec<String>,
@@ -91,9 +94,12 @@ enum Commands {
         /// Proposal index
         #[arg(long)]
         proposal: u64,
-        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
-        #[arg(long)]
-        nsk: String,
+        /// Your nullifier secret key (hex, 64 chars). Provide either --account or --nsk.
+        #[arg(long, conflicts_with = "account")]
+        nsk: Option<String>,
+        /// Your private wallet account (e.g. Private/xxx). Resolves NSK from wallet keystore.
+        #[arg(long, conflicts_with = "nsk")]
+        account: Option<String>,
         /// Member NPKs (hex). Required until on-chain state fetching is implemented.
         #[arg(long, num_args = 1..)]
         members: Vec<String>,
@@ -107,9 +113,12 @@ enum Commands {
         /// Proposal index
         #[arg(long)]
         proposal: u64,
-        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
-        #[arg(long)]
-        nsk: String,
+        /// Your nullifier secret key (hex, 64 chars). Provide either --account or --nsk.
+        #[arg(long, conflicts_with = "account")]
+        nsk: Option<String>,
+        /// Your private wallet account (e.g. Private/xxx). Resolves NSK from wallet keystore.
+        #[arg(long, conflicts_with = "nsk")]
+        account: Option<String>,
         /// Member NPKs (hex). Required until on-chain state fetching is implemented.
         #[arg(long, num_args = 1..)]
         members: Vec<String>,
@@ -123,9 +132,12 @@ enum Commands {
         /// Proposal index
         #[arg(long)]
         proposal: u64,
-        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
-        #[arg(long)]
-        nsk: String,
+        /// Your nullifier secret key (hex, 64 chars). Provide either --account or --nsk.
+        #[arg(long, conflicts_with = "account")]
+        nsk: Option<String>,
+        /// Your private wallet account (e.g. Private/xxx). Resolves NSK from wallet keystore.
+        #[arg(long, conflicts_with = "nsk")]
+        account: Option<String>,
         /// Member NPKs (hex). Required until on-chain state fetching is implemented.
         #[arg(long, num_args = 1..)]
         members: Vec<String>,
@@ -277,6 +289,35 @@ fn parse_instruction_data(args: &[String]) -> Vec<u32> {
     }).collect()
 }
 
+/// Resolve NSK from --account (wallet keystore) or --nsk (raw hex).
+fn resolve_nsk(
+    wallet_core: &WalletCore,
+    account: Option<String>,
+    nsk: Option<String>,
+) -> String {
+    if let Some(account_str) = account {
+        // Strip "Private/" prefix, parse as AccountId
+        let id_str = account_str.trim_start_matches("Private/");
+        let account_id: nssa::AccountId = id_str.parse().unwrap_or_else(|e| {
+            eprintln!("Error parsing account ID '{}': {}", account_str, e);
+            std::process::exit(1);
+        });
+        let nsk_bytes = wallet_core
+            .get_account_nullifier_secret_key(account_id)
+            .unwrap_or_else(|| {
+                eprintln!("Error: account '{}' not found in wallet keystore", account_str);
+                std::process::exit(1);
+            });
+        println!("   NSK resolved from wallet account: {}", account_str);
+        hex::encode(nsk_bytes)
+    } else {
+        nsk.unwrap_or_else(|| {
+            eprintln!("Error: either --account or --nsk must be provided");
+            std::process::exit(1);
+        })
+    }
+}
+
 /// Generate a ZK vote proof using the VoteProver.
 fn generate_vote_proof(
     nsk_hex: &str,
@@ -397,6 +438,7 @@ async fn main() {
         Commands::Propose {
             multisig,
             nsk,
+            account,
             members,
             target_program,
             instruction_data,
@@ -405,6 +447,7 @@ async fn main() {
             authorized_index,
             proposal_index,
         } => {
+            let nsk = resolve_nsk(&wallet_core, account, nsk);
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
             let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal_index);
@@ -449,7 +492,8 @@ async fn main() {
         //
         // Account layout: [state_pda, proposal_pda]
         // No signer — membership proven via ZK proof.
-        Commands::Approve { multisig, proposal, nsk, members } => {
+        Commands::Approve { multisig, proposal, nsk, account, members } => {
+            let nsk = resolve_nsk(&wallet_core, account, nsk);
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
             let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal);
@@ -482,7 +526,8 @@ async fn main() {
         //
         // Account layout: [state_pda, proposal_pda]
         // No signer — membership proven via ZK proof.
-        Commands::Reject { multisig, proposal, nsk, members } => {
+        Commands::Reject { multisig, proposal, nsk, account, members } => {
+            let nsk = resolve_nsk(&wallet_core, account, nsk);
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
             let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal);
@@ -516,7 +561,8 @@ async fn main() {
         // Account layout: [state_pda, proposal_pda]
         // No signer — membership proven via ZK proof.
         // Target accounts are handled by ChainedCall inside the program.
-        Commands::Execute { multisig, proposal, nsk, members } => {
+        Commands::Execute { multisig, proposal, nsk, account, members } => {
+            let nsk = resolve_nsk(&wallet_core, account, nsk);
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
             let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal);
