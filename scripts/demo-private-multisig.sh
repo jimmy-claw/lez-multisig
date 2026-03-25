@@ -117,7 +117,7 @@ MEMBERS_ARGS="--members $NPK1 $NPK2 $NPK3"
 # ── Step 4: Create 2-of-3 multisig ────────────────────────────────────────
 banner "Step 4: Create 2-of-3 multisig"
 
-CREATE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" create \
+CREATE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" --no-wait create \
     --threshold 2 \
     $MEMBERS_ARGS 2>&1)
 echo "$CREATE_OUTPUT"
@@ -127,11 +127,14 @@ CREATE_KEY=$(echo "$CREATE_OUTPUT" | grep "Create key:" | head -1 | awk '{print 
 echo ""
 echo "  Multisig create key: $CREATE_KEY"
 
+echo "  Waiting for create tx inclusion..."
+sleep 10
+
 # ── Step 5: Propose ───────────────────────────────────────────────────────
 banner "Step 5: Member 1 proposes action"
 
 echo "  Generating ZK proof for propose (RISC0_DEV_MODE=1)..."
-PROPOSE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" propose \
+PROPOSE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" --no-wait propose \
     --multisig "$CREATE_KEY" \
     --nsk "$NSK1" \
     $MEMBERS_ARGS \
@@ -140,33 +143,42 @@ PROPOSE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" propose \
     --proposal-index 1 2>&1)
 echo "$PROPOSE_OUTPUT"
 
+echo "  Waiting for propose tx inclusion..."
+sleep 10
+
 # ── Step 6: Approve with member 1 ─────────────────────────────────────────
 banner "Step 6: Member 1 approves proposal #1"
 
 echo "  Generating ZK proof for approve (member 1)..."
-APPROVE1_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" approve \
+APPROVE1_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" --no-wait approve \
     --multisig "$CREATE_KEY" \
     --proposal 1 \
     --nsk "$NSK1" \
     $MEMBERS_ARGS 2>&1)
 echo "$APPROVE1_OUTPUT"
 
+echo "  Waiting for approve tx inclusion..."
+sleep 10
+
 # ── Step 7: Approve with member 2 ─────────────────────────────────────────
 banner "Step 7: Member 2 approves proposal #1"
 
 echo "  Generating ZK proof for approve (member 2)..."
-APPROVE2_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" approve \
+APPROVE2_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" --no-wait approve \
     --multisig "$CREATE_KEY" \
     --proposal 1 \
     --nsk "$NSK2" \
     $MEMBERS_ARGS 2>&1)
 echo "$APPROVE2_OUTPUT"
 
+echo "  Waiting for approve tx inclusion..."
+sleep 10
+
 # ── Step 8: Execute ───────────────────────────────────────────────────────
 banner "Step 8: Execute proposal #1"
 
 echo "  Generating ZK proof for execute..."
-EXECUTE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" execute \
+EXECUTE_OUTPUT=$("$MULTISIG_CLI" -p "$GUEST_BIN" --no-wait execute \
     --multisig "$CREATE_KEY" \
     --proposal 1 \
     --nsk "$NSK1" \

@@ -29,6 +29,10 @@ struct Cli {
     #[arg(long, short = 'p', env = "MULTISIG_PROGRAM", default_value = "target/riscv32im-risc0-zkvm-elf/docker/multisig.bin")]
     program: String,
 
+    /// Don't wait for transaction confirmation (print tx_hash and exit)
+    #[arg(long, default_value_t = false)]
+    no_wait: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -166,7 +170,7 @@ fn load_program(path: &str) -> (Program, nssa::ProgramId) {
     (program, id)
 }
 
-async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, _label: &str) {
+async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, _label: &str, no_wait: bool) {
     let response = wallet_core
         .sequencer_client
         .send_tx_public(tx)
@@ -174,6 +178,12 @@ async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, _la
         .unwrap();
 
     println!("   tx_hash: {}", response.tx_hash);
+
+    if no_wait {
+        println!("   Submitted (--no-wait, skipping confirmation)");
+        return;
+    }
+
     println!("   Waiting for confirmation...");
 
     let poller = wallet::poller::TxPoller::new(
@@ -197,6 +207,7 @@ async fn submit_private_tx(
     account_ids: Vec<AccountId>,
     instruction: Instruction,
     label: &str,
+    no_wait: bool,
 ) {
     let message = Message::try_new(
         program_id,
@@ -206,7 +217,7 @@ async fn submit_private_tx(
     ).unwrap();
     let witness_set = WitnessSet::for_message(&message, &[] as &[&nssa::PrivateKey]);
     let tx = PublicTransaction::new(message, witness_set);
-    submit_and_confirm(wallet_core, tx, label).await;
+    submit_and_confirm(wallet_core, tx, label, no_wait).await;
 }
 
 /// Parse a hex string into a 32-byte array.
@@ -373,7 +384,7 @@ async fn main() {
             ).unwrap();
             let witness_set = WitnessSet::for_message(&message, &[] as &[&nssa::PrivateKey]);
             let tx = PublicTransaction::new(message, witness_set);
-            submit_and_confirm(&wallet_core, tx, "Create multisig").await;
+            submit_and_confirm(&wallet_core, tx, "Create multisig", cli.no_wait).await;
 
             println!("\n   Save this create key to interact with the multisig:");
             println!("   {}", AccountId::new(ck));
@@ -430,6 +441,7 @@ async fn main() {
                 vec![multisig_state_id, proposal_pda],
                 instruction,
                 "Propose",
+                cli.no_wait,
             ).await;
         }
 
@@ -462,6 +474,7 @@ async fn main() {
                     nullifier,
                 },
                 "Approve",
+                cli.no_wait,
             ).await;
         }
 
@@ -494,6 +507,7 @@ async fn main() {
                     nullifier,
                 },
                 "Reject",
+                cli.no_wait,
             ).await;
         }
 
@@ -527,6 +541,7 @@ async fn main() {
                     nullifier,
                 },
                 "Execute",
+                cli.no_wait,
             ).await;
         }
 
