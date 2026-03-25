@@ -7,9 +7,15 @@ edition = "2024"
 name = "multisig"
 path = "src/bin/multisig.rs"
 
+[[bin]]
+name = "vote-circuit"
+path = "src/bin/vote_circuit.rs"
+
 [dependencies]
 multisig_core = { path = "../../multisig_core" }
 multisig_program = { path = "../../multisig_program" }
+vote_circuit = { path = "../../vote_circuit" }
 nssa_core.workspace = true
 risc0-zkvm.workspace = true
+serde.workspace = true
 borsh.workspace = true

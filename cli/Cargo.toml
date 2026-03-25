@@ -11,6 +11,8 @@ path = "src/bin/multisig.rs"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 multisig_core = { path = "../multisig_core" }
+multisig_client = { path = "../multisig_client" }
+vote_circuit = { path = "../vote_circuit" }
 nssa_core = { git = "https://github.com/logos-blockchain/lssa.git", branch = "main" }
 nssa = { git = "https://github.com/logos-blockchain/lssa.git", branch = "main" }
 wallet = { git = "https://github.com/logos-blockchain/lssa.git", branch = "main" }

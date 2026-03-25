@@ -5,17 +5,22 @@ use nssa::{
     program::Program,
     public_transaction::{Message, WitnessSet},
 };
+use nssa_core::NullifierPublicKey;
 use multisig_core::{
     Instruction,
     compute_multisig_state_pda,
     compute_proposal_pda,
 };
+use multisig_client::VoteProver;
 use wallet::WalletCore;
 
-/// LSSA Multisig CLI — M-of-N threshold governance for LEZ
+/// LSSA Private Multisig CLI — M-of-N threshold governance with ZK voting
 ///
-/// Squads-style on-chain proposal flow:
+/// Privacy-preserving proposal flow:
 ///   propose → approve (by M members) → execute
+///
+/// Membership is proven via ZK proof (vote_circuit). The voter's identity
+/// (NSK) never leaves the client — only the nullifier appears on-chain.
 #[derive(Parser)]
 #[command(name = "multisig", version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -30,31 +35,34 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new M-of-N multisig
+    /// Create a new M-of-N multisig with NPK-based membership
     Create {
         /// Required signatures (M)
         #[arg(long, short = 't')]
         threshold: u8,
-        /// Member account IDs (base58)
+        /// Member nullifier public keys (hex-encoded, 64 chars each)
         #[arg(long, short = 'm', num_args = 1..)]
-        member: Vec<String>,
+        members: Vec<String>,
         /// Optional create key (base58). If omitted, a random one is generated.
         #[arg(long)]
         create_key: Option<String>,
     },
 
-    /// Create a proposal (raw instruction data)
+    /// Create a proposal (any member, proven via ZK)
     Propose {
-        /// Multisig create_key (base58) to identify which multisig
+        /// Multisig create_key (base58)
         #[arg(long)]
         multisig: String,
-        /// Your account ID (base58, must be a member)
+        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
         #[arg(long)]
-        account: String,
-        /// Target program ID (base58)
+        nsk: String,
+        /// Member NPKs (hex). Required until on-chain state fetching is implemented.
+        #[arg(long, num_args = 1..)]
+        members: Vec<String>,
+        /// Target program ID (hex, 64 chars)
         #[arg(long)]
         target_program: String,
-        /// Serialized instruction data for the target program (hex-encoded u32 words, e.g. "01000000 02000000")
+        /// Serialized instruction data for the target program (hex u32 words or decimal)
         #[arg(long, num_args = 0..)]
         instruction_data: Vec<String>,
         /// Number of target accounts expected at execute time
@@ -66,52 +74,65 @@ enum Commands {
         /// Which target account indices (0-based) get is_authorized=true
         #[arg(long, num_args = 0..)]
         authorized_index: Vec<u8>,
-        /// Proposal index hint (used to compute proposal PDA — set to expected next index)
+        /// Proposal index hint (used to compute proposal PDA)
         #[arg(long)]
         proposal_index: u64,
     },
 
-    /// Approve a proposal
+    /// Approve a proposal (ZK-proven membership, anonymous vote)
     Approve {
         /// Multisig create_key (base58)
         #[arg(long)]
         multisig: String,
         /// Proposal index
-        #[arg(long, short = 'i')]
-        index: u64,
-        /// Your account ID (base58, must be a member)
         #[arg(long)]
-        account: String,
+        proposal: u64,
+        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
+        #[arg(long)]
+        nsk: String,
+        /// Member NPKs (hex). Required until on-chain state fetching is implemented.
+        #[arg(long, num_args = 1..)]
+        members: Vec<String>,
     },
 
-    /// Reject a proposal
+    /// Reject a proposal (ZK-proven membership, anonymous vote)
     Reject {
         /// Multisig create_key (base58)
         #[arg(long)]
         multisig: String,
         /// Proposal index
-        #[arg(long, short = 'i')]
-        index: u64,
-        /// Your account ID (base58, must be a member)
         #[arg(long)]
-        account: String,
+        proposal: u64,
+        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
+        #[arg(long)]
+        nsk: String,
+        /// Member NPKs (hex). Required until on-chain state fetching is implemented.
+        #[arg(long, num_args = 1..)]
+        members: Vec<String>,
     },
 
-    /// Execute a fully-approved proposal
+    /// Execute a fully-approved proposal (ZK-proven membership)
     Execute {
         /// Multisig create_key (base58)
         #[arg(long)]
         multisig: String,
         /// Proposal index
-        #[arg(long, short = 'i')]
-        index: u64,
-        /// Your account ID (base58, must be a member)
         #[arg(long)]
-        account: String,
+        proposal: u64,
+        /// Your nullifier secret key (hex, 64 chars). Never sent on-chain.
+        #[arg(long)]
+        nsk: String,
+        /// Member NPKs (hex). Required until on-chain state fetching is implemented.
+        #[arg(long, num_args = 1..)]
+        members: Vec<String>,
     },
 
     /// Show multisig status
-    Status,
+    Status {
+        /// Multisig create_key (base58). If omitted, shows general info.
+        #[arg(long)]
+        multisig: Option<String>,
+    },
 
     /// Generate shell completions
     Completions {
@@ -138,14 +159,13 @@ fn load_program(path: &str) -> (Program, nssa::ProgramId) {
     (program, id)
 }
 
-async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, label: &str) {
+async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, _label: &str) {
     let response = wallet_core
         .sequencer_client
         .send_tx_public(tx)
         .await
         .unwrap();
 
-    println!("📤 {} submitted", label);
     println!("   tx_hash: {}", response.tx_hash);
     println!("   Waiting for confirmation...");
 
@@ -155,44 +175,29 @@ async fn submit_and_confirm(wallet_core: &WalletCore, tx: PublicTransaction, lab
     );
 
     match poller.poll_tx(response.tx_hash).await {
-        Ok(_) => println!("✅ Confirmed!"),
+        Ok(_) => println!("   Confirmed!"),
         Err(e) => {
-            eprintln!("❌ Not confirmed: {e:#}");
+            eprintln!("   Not confirmed: {e:#}");
             std::process::exit(1);
         }
     }
 }
 
-/// Build and submit a single-signer transaction.
-/// `account_ids` is the full ordered account list for the instruction.
-/// `signer_id` is the one signing account (nonce provided only for it).
-async fn submit_signed_tx(
+/// Submit an unsigned transaction (no signer needed — membership proven via ZK).
+async fn submit_private_tx(
     wallet_core: &WalletCore,
     program_id: nssa::ProgramId,
     account_ids: Vec<AccountId>,
-    signer_id: AccountId,
     instruction: Instruction,
     label: &str,
 ) {
-    let nonces = wallet_core
-        .get_accounts_nonces(vec![signer_id])
-        .await
-        .expect("Failed to get nonces");
-
-    let signing_key = wallet_core
-        .storage()
-        .user_data
-        .get_pub_account_signing_key(signer_id)
-        .expect("Signing key not found — is this account in your wallet?");
-
     let message = Message::try_new(
         program_id,
         account_ids,
-        nonces,
+        vec![],
         instruction,
     ).unwrap();
-
-    let witness_set = WitnessSet::for_message(&message, &[signing_key]);
+    let witness_set = WitnessSet::for_message(&message, &[] as &[&nssa::PrivateKey]);
     let tx = PublicTransaction::new(message, witness_set);
     submit_and_confirm(wallet_core, tx, label).await;
 }
@@ -215,6 +220,13 @@ fn parse_create_key(s: &str) -> [u8; 32] {
     *id.value()
 }
 
+/// Parse member NPK hex strings into NullifierPublicKeys.
+fn parse_member_npks(hex_strings: &[String]) -> Vec<NullifierPublicKey> {
+    hex_strings.iter()
+        .map(|s| NullifierPublicKey(parse_hex32(s)))
+        .collect()
+}
+
 /// Parse a ProgramId ([u32; 8]) from a 64-char hex string (32 bytes, interpreted as 8 little-endian u32s).
 fn parse_program_id(s: &str) -> nssa::ProgramId {
     let bytes = hex::decode(s).unwrap_or_else(|_| {
@@ -233,21 +245,34 @@ fn parse_program_id(s: &str) -> nssa::ProgramId {
 }
 
 /// Parse hex-encoded u32 words into Vec<u32>.
-/// Each word is a hex string like "01000000" (little-endian u32) or a plain u32 decimal.
 fn parse_instruction_data(args: &[String]) -> Vec<u32> {
     args.iter().map(|s| {
-        // Try hex first
         if let Ok(bytes) = hex::decode(s) {
             if bytes.len() == 4 {
                 return u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             }
         }
-        // Fall back to decimal
         s.parse::<u32>().unwrap_or_else(|_| {
             eprintln!("Error: instruction data word '{}' is neither valid 4-byte hex nor decimal u32", s);
             std::process::exit(1);
         })
     }).collect()
+}
+
+/// Generate a ZK vote proof using the VoteProver.
+fn generate_vote_proof(
+    nsk_hex: &str,
+    member_npks: &[NullifierPublicKey],
+    proposal_index: u64,
+    domain: &str,
+) -> (Vec<u32>, [u8; 32]) {
+    let nsk = parse_hex32(nsk_hex);
+    let prover = VoteProver::new(member_npks.to_vec());
+    prover.generate_proof(&nsk, proposal_index, domain)
+        .unwrap_or_else(|e| {
+            eprintln!("Error generating ZK proof: {e}");
+            std::process::exit(1);
+        })
 }
 
 #[tokio::main]
@@ -260,17 +285,29 @@ async fn main() {
             generate(*shell, &mut Cli::command(), "multisig", &mut std::io::stdout());
             return;
         }
-        Commands::Status => {
-            println!("📊 Multisig Status");
-            println!("   Program path:   {}", cli.program);
+        Commands::Status { multisig } => {
+            println!("Multisig Status");
+            println!("   Program path: {}", cli.program);
             if let Ok(bytecode) = std::fs::read(&cli.program) {
                 if let Ok(program) = Program::new(bytecode) {
-                    println!("   Program ID:     {:?}", program.id());
+                    println!("   Program ID:   {:?}", program.id());
                 }
             } else {
                 println!("   Program binary: not found");
             }
-            println!("   Use --create-key with 'create' or --multisig with other commands");
+            if let Some(ms) = multisig {
+                let ck = parse_create_key(ms);
+                // Load program to compute PDA
+                if let Ok(bytecode) = std::fs::read(&cli.program) {
+                    if let Ok(program) = Program::new(bytecode) {
+                        let pid = program.id();
+                        let state_pda = compute_multisig_state_pda(&pid, &ck);
+                        println!("   Create key:   {}", AccountId::new(ck));
+                        println!("   State PDA:    {}", state_pda);
+                        // TODO: fetch and display on-chain MultisigState
+                    }
+                }
+            }
             return;
         }
         _ => {}
@@ -282,15 +319,13 @@ async fn main() {
     match cli.command {
         // ── Create ──────────────────────────────────────────────────────
         //
-        // Account layout: [state_pda, member1, member2, ..., memberN]
+        // Account layout: [state_pda]
         // No signer required — anyone can create.
-        Commands::Create { threshold, member, create_key } => {
-            let members: Vec<AccountId> = member.iter()
-                .map(|s| s.parse().expect("Invalid member ID"))
-                .collect();
+        Commands::Create { threshold, members, create_key } => {
+            let member_npks = parse_member_npks(&members);
 
-            if (threshold as usize) > members.len() {
-                eprintln!("Error: threshold ({}) > members ({})", threshold, members.len());
+            if (threshold as usize) > member_npks.len() {
+                eprintln!("Error: threshold ({}) > members ({})", threshold, member_npks.len());
                 std::process::exit(1);
             }
 
@@ -305,19 +340,17 @@ async fn main() {
 
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
 
-            println!("🔐 Creating {}-of-{} multisig", threshold, members.len());
+            println!("Creating {}-of-{} multisig", threshold, member_npks.len());
             println!("   Create key: {}", AccountId::new(ck));
             println!("   State PDA:  {}", multisig_state_id);
 
             let instruction = Instruction::CreateMultisig {
                 create_key: ck,
                 threshold,
-                members: members.iter().map(|id| nssa_core::NullifierPublicKey(*id.value())).collect(),
+                members: member_npks,
             };
 
-            // Account list: [state_pda, member1, member2, ..., memberN]
-            let mut account_ids = vec![multisig_state_id];
-            account_ids.extend(members.iter().copied());
+            let account_ids = vec![multisig_state_id];
 
             let message = Message::try_new(
                 program_id,
@@ -329,17 +362,18 @@ async fn main() {
             let tx = PublicTransaction::new(message, witness_set);
             submit_and_confirm(&wallet_core, tx, "Create multisig").await;
 
-            println!("\n💡 Save this create key to interact with the multisig:");
+            println!("\n   Save this create key to interact with the multisig:");
             println!("   {}", AccountId::new(ck));
         }
 
         // ── Propose ─────────────────────────────────────────────────────
         //
-        // Account layout: [state_pda, proposer, proposal_pda]
-        // Proposer is the signer.
+        // Account layout: [state_pda, proposal_pda]
+        // No signer — membership proven via ZK proof.
         Commands::Propose {
             multisig,
-            account,
+            nsk,
+            members,
             target_program,
             instruction_data,
             target_account_count,
@@ -349,21 +383,24 @@ async fn main() {
         } => {
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
-            let account_id: AccountId = account.parse().expect("Invalid account ID");
             let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal_index);
+            let member_npks = parse_member_npks(&members);
 
             let target_program_id: nssa::ProgramId = parse_program_id(&target_program);
-
             let target_instruction_data = parse_instruction_data(&instruction_data);
-
             let pda_seeds: Vec<[u8; 32]> = pda_seed.iter()
                 .map(|s| parse_hex32(s))
                 .collect();
 
-            println!("📝 Creating proposal #{}...", proposal_index);
+            println!("Generating ZK proof for propose...");
+            let (vote_receipt, nullifier) = generate_vote_proof(
+                &nsk, &member_npks, proposal_index, "propose",
+            );
+
+            println!("Creating proposal #{}...", proposal_index);
             println!("   State PDA:    {}", multisig_state_id);
-            println!("   Proposer:     {}", account_id);
             println!("   Proposal PDA: {}", proposal_pda);
+            println!("   Nullifier:    {}", hex::encode(nullifier));
 
             let instruction = Instruction::Propose {
                 target_program_id,
@@ -371,14 +408,13 @@ async fn main() {
                 target_account_count,
                 pda_seeds,
                 authorized_indices: authorized_index,
-                vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
-                nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                vote_receipt,
+                nullifier,
             };
 
-            submit_signed_tx(
+            submit_private_tx(
                 &wallet_core, program_id,
-                vec![multisig_state_id, account_id, proposal_pda],
-                account_id,
+                vec![multisig_state_id, proposal_pda],
                 instruction,
                 "Propose",
             ).await;
@@ -386,27 +422,31 @@ async fn main() {
 
         // ── Approve ─────────────────────────────────────────────────────
         //
-        // Account layout: [state_pda, approver, proposal_pda]
-        // Approver is the signer.
-        Commands::Approve { multisig, index, account } => {
+        // Account layout: [state_pda, proposal_pda]
+        // No signer — membership proven via ZK proof.
+        Commands::Approve { multisig, proposal, nsk, members } => {
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
-            let account_id: AccountId = account.parse().expect("Invalid account ID");
-            let proposal_pda = compute_proposal_pda(&program_id, &ck, index);
+            let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal);
+            let member_npks = parse_member_npks(&members);
 
-            println!("👍 Approving proposal #{}...", index);
+            println!("Generating ZK proof for approve...");
+            let (vote_receipt, nullifier) = generate_vote_proof(
+                &nsk, &member_npks, proposal, "approve",
+            );
+
+            println!("Approving proposal #{}...", proposal);
             println!("   State PDA:    {}", multisig_state_id);
-            println!("   Approver:     {}", account_id);
             println!("   Proposal PDA: {}", proposal_pda);
+            println!("   Nullifier:    {}", hex::encode(nullifier));
 
-            submit_signed_tx(
+            submit_private_tx(
                 &wallet_core, program_id,
-                vec![multisig_state_id, account_id, proposal_pda],
-                account_id,
+                vec![multisig_state_id, proposal_pda],
                 Instruction::Approve {
-                    proposal_index: index,
-                    vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
-                    nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                    proposal_index: proposal,
+                    vote_receipt,
+                    nullifier,
                 },
                 "Approve",
             ).await;
@@ -414,27 +454,31 @@ async fn main() {
 
         // ── Reject ──────────────────────────────────────────────────────
         //
-        // Account layout: [state_pda, rejector, proposal_pda]
-        // Rejector is the signer.
-        Commands::Reject { multisig, index, account } => {
+        // Account layout: [state_pda, proposal_pda]
+        // No signer — membership proven via ZK proof.
+        Commands::Reject { multisig, proposal, nsk, members } => {
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
-            let account_id: AccountId = account.parse().expect("Invalid account ID");
-            let proposal_pda = compute_proposal_pda(&program_id, &ck, index);
+            let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal);
+            let member_npks = parse_member_npks(&members);
 
-            println!("👎 Rejecting proposal #{}...", index);
+            println!("Generating ZK proof for reject...");
+            let (vote_receipt, nullifier) = generate_vote_proof(
+                &nsk, &member_npks, proposal, "reject",
+            );
+
+            println!("Rejecting proposal #{}...", proposal);
             println!("   State PDA:    {}", multisig_state_id);
-            println!("   Rejector:     {}", account_id);
             println!("   Proposal PDA: {}", proposal_pda);
+            println!("   Nullifier:    {}", hex::encode(nullifier));
 
-            submit_signed_tx(
+            submit_private_tx(
                 &wallet_core, program_id,
-                vec![multisig_state_id, account_id, proposal_pda],
-                account_id,
+                vec![multisig_state_id, proposal_pda],
                 Instruction::Reject {
-                    proposal_index: index,
-                    vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
-                    nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                    proposal_index: proposal,
+                    vote_receipt,
+                    nullifier,
                 },
                 "Reject",
             ).await;
@@ -442,33 +486,37 @@ async fn main() {
 
         // ── Execute ─────────────────────────────────────────────────────
         //
-        // Account layout: [state_pda, executor, proposal_pda]
-        // Executor is the signer. Target accounts are handled by ChainedCall
-        // inside the program itself — no extra accounts needed in the CLI.
-        Commands::Execute { multisig, index, account } => {
+        // Account layout: [state_pda, proposal_pda]
+        // No signer — membership proven via ZK proof.
+        // Target accounts are handled by ChainedCall inside the program.
+        Commands::Execute { multisig, proposal, nsk, members } => {
             let ck = parse_create_key(&multisig);
             let multisig_state_id = compute_multisig_state_pda(&program_id, &ck);
-            let account_id: AccountId = account.parse().expect("Invalid account ID");
-            let proposal_pda = compute_proposal_pda(&program_id, &ck, index);
+            let proposal_pda = compute_proposal_pda(&program_id, &ck, proposal);
+            let member_npks = parse_member_npks(&members);
 
-            println!("⚡ Executing proposal #{}...", index);
+            println!("Generating ZK proof for execute...");
+            let (vote_receipt, nullifier) = generate_vote_proof(
+                &nsk, &member_npks, proposal, "execute",
+            );
+
+            println!("Executing proposal #{}...", proposal);
             println!("   State PDA:    {}", multisig_state_id);
-            println!("   Executor:     {}", account_id);
             println!("   Proposal PDA: {}", proposal_pda);
+            println!("   Nullifier:    {}", hex::encode(nullifier));
 
-            submit_signed_tx(
+            submit_private_tx(
                 &wallet_core, program_id,
-                vec![multisig_state_id, account_id, proposal_pda],
-                account_id,
+                vec![multisig_state_id, proposal_pda],
                 Instruction::Execute {
-                    proposal_index: index,
-                    vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
-                    nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                    proposal_index: proposal,
+                    vote_receipt,
+                    nullifier,
                 },
                 "Execute",
             ).await;
         }
 
-        Commands::Completions { .. } | Commands::Status => unreachable!(),
+        Commands::Completions { .. } | Commands::Status { .. } => unreachable!(),
     }
 }

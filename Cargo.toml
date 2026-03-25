@@ -8,6 +8,7 @@ members = [
     "cli",
     "e2e_tests",
     "vote_circuit",
+    "multisig_client",
 ]
 
 [workspace.dependencies]
