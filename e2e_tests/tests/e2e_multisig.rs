@@ -99,34 +99,8 @@ async fn get_multisig_state(client: &SequencerClient, state_id: AccountId) -> Mu
 
 async fn get_proposal(client: &SequencerClient, proposal_id: AccountId) -> Proposal {
     let account = client.get_account(proposal_id).await.expect("Failed to get proposal");
-    println!("  [DEBUG] Proposal account program_owner: {:?}", account.account.program_owner);
-    println!("  [DEBUG] Proposal account balance: {}", account.account.balance);
-    println!("  [DEBUG] Proposal account nonce: {}", account.account.nonce);
     let data: Vec<u8> = account.account.data.into();
-    println!("  [DEBUG] Proposal raw data length: {} bytes", data.len());
-    if data.len() >= 128 {
-        println!("  [DEBUG] Proposal raw data (first 128 bytes): {:02x?}", &data[..128]);
-    } else {
-        println!("  [DEBUG] Proposal raw data (all {} bytes): {:02x?}", data.len(), &data);
-    }
-    // Also try to manually read the index field (first u64)
-    if data.len() >= 8 {
-        let index = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        println!("  [DEBUG] Manual index read: {}", index);
-    }
-    match borsh::from_slice::<Proposal>(&data) {
-        Ok(p) => {
-            println!("  [DEBUG] Proposal deserialized OK! index={}, status={:?}, approved={}", p.index, p.status, p.approved.len());
-            p
-        }
-        Err(e) => {
-            // Try to deserialize a MultisigState instead to see if wrong account
-            if let Ok(ms) = borsh::from_slice::<MultisigState>(&data) {
-                panic!("Account contains MultisigState (not Proposal)! members={}, threshold={}", ms.members.len(), ms.threshold);
-            }
-            panic!("Failed to deserialize proposal ({} bytes): {}", data.len(), e);
-        }
-    }
+    borsh::from_slice(&data).expect("Failed to deserialize proposal")
 }
 
 fn deploy_program(bytecode: Vec<u8>) -> (ProgramDeploymentTransaction, nssa::ProgramId) {

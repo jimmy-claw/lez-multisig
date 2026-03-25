@@ -134,6 +134,13 @@ enum Commands {
         multisig: Option<String>,
     },
 
+    /// Derive NPK (nullifier public key) from an NSK (nullifier secret key)
+    DeriveNpk {
+        /// NSK hex (64 chars)
+        #[arg(long)]
+        nsk: String,
+    },
+
     /// Generate shell completions
     Completions {
         /// Shell to generate for
@@ -281,6 +288,12 @@ async fn main() {
 
     // Commands that don't need wallet/program
     match &cli.command {
+        Commands::DeriveNpk { nsk } => {
+            let nsk_bytes = parse_hex32(nsk);
+            let npk = NullifierPublicKey::from(&nsk_bytes);
+            println!("{}", hex::encode(npk.0));
+            return;
+        }
         Commands::Completions { shell } => {
             generate(*shell, &mut Cli::command(), "multisig", &mut std::io::stdout());
             return;
@@ -517,6 +530,6 @@ async fn main() {
             ).await;
         }
 
-        Commands::Completions { .. } | Commands::Status { .. } => unreachable!(),
+        Commands::Completions { .. } | Commands::Status { .. } | Commands::DeriveNpk { .. } => unreachable!(),
     }
 }
