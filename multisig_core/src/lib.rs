@@ -43,6 +43,7 @@ pub enum Instruction {
 
     /// Create a new proposal (any member can propose).
     /// Creates a separate PDA account for the proposal.
+    /// Proposer proves membership via ZK proof (vote_receipt + nullifier).
     Propose {
         /// Target program to call when executed
         target_program_id: ProgramId,
@@ -54,22 +55,41 @@ pub enum Instruction {
         pda_seeds: Vec<[u8; 32]>,
         /// Which target account indices (0-based) get `is_authorized = true`
         authorized_indices: Vec<u8>,
+        /// RISC0 receipt from vote_circuit proving proposer membership
+        vote_receipt: Vec<u32>,
+        /// Proposer's vote nullifier (derived via vote_circuit)
+        nullifier: [u8; 32],
     },
 
-    /// Approve an existing proposal (any member, one approval per member)
+    /// Approve an existing proposal (any member, one approval per member).
+    /// Member proves membership via ZK proof (vote_receipt + nullifier).
     Approve {
         proposal_index: u64,
+        /// RISC0 receipt from vote_circuit proving voter membership
+        vote_receipt: Vec<u32>,
+        /// Voter's nullifier (prevents double-voting)
+        nullifier: [u8; 32],
     },
 
-    /// Reject a proposal
+    /// Reject a proposal.
+    /// Member proves membership via ZK proof (vote_receipt + nullifier).
     Reject {
         proposal_index: u64,
+        /// RISC0 receipt from vote_circuit proving voter membership
+        vote_receipt: Vec<u32>,
+        /// Voter's nullifier (prevents double-voting)
+        nullifier: [u8; 32],
     },
 
     /// Execute a fully-approved proposal.
-    /// The transaction must include the target accounts after [multisig_state, executor, proposal].
+    /// Executor proves membership via ZK proof (vote_receipt + nullifier).
+    /// Target accounts follow [multisig_state, proposal] in the accounts list.
     Execute {
         proposal_index: u64,
+        /// RISC0 receipt from vote_circuit proving executor membership
+        vote_receipt: Vec<u32>,
+        /// Executor's nullifier
+        nullifier: [u8; 32],
     },
 }
 

@@ -371,6 +371,8 @@ async fn main() {
                 target_account_count,
                 pda_seeds,
                 authorized_indices: authorized_index,
+                vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
+                nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
             };
 
             submit_signed_tx(
@@ -401,7 +403,11 @@ async fn main() {
                 &wallet_core, program_id,
                 vec![multisig_state_id, account_id, proposal_pda],
                 account_id,
-                Instruction::Approve { proposal_index: index },
+                Instruction::Approve {
+                    proposal_index: index,
+                    vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
+                    nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                },
                 "Approve",
             ).await;
         }
@@ -425,7 +431,11 @@ async fn main() {
                 &wallet_core, program_id,
                 vec![multisig_state_id, account_id, proposal_pda],
                 account_id,
-                Instruction::Reject { proposal_index: index },
+                Instruction::Reject {
+                    proposal_index: index,
+                    vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
+                    nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                },
                 "Reject",
             ).await;
         }
@@ -450,7 +460,11 @@ async fn main() {
                 &wallet_core, program_id,
                 vec![multisig_state_id, account_id, proposal_pda],
                 account_id,
-                Instruction::Execute { proposal_index: index },
+                Instruction::Execute {
+                    proposal_index: index,
+                    vote_receipt: vec![], // TODO(Day 3): generate ZK proof via vote_circuit
+                    nullifier: [0u8; 32], // TODO(Day 3): compute from NSK
+                },
                 "Execute",
             ).await;
         }

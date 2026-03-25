@@ -1,38 +1,49 @@
 // Execute handler — executes a fully-approved proposal by emitting a ChainedCall.
 //
+// No signer account needed. Membership is proven by the vote_circuit receipt.
+//
 // The multisig doesn't execute actions directly. It builds a ChainedCall
 // to the target program specified in the proposal, delegating actual execution.
 //
 // Expected accounts:
 // - accounts[0]: multisig_state PDA (read threshold/membership)
-// - accounts[1]: executor (must be authorized signer, must be member)
-// - accounts[2]: proposal PDA account (owned by multisig program)
-// - accounts[3..]: target accounts to pass to the ChainedCall
+// - accounts[1]: proposal PDA account (owned by multisig program)
+// - accounts[2..]: target accounts to pass to the ChainedCall
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall, PdaSeed};
 use multisig_core::{MultisigState, Proposal, ProposalStatus};
 
+/// Placeholder image ID for the vote circuit — updated when circuit is finalized.
+const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [0u32; 8];
+
+/// Verify a vote circuit proof. No-op in host/test builds; real verification in RISC0 guest.
+#[allow(unused_variables)]
+fn verify_vote_proof(vote_receipt: &[u32]) {
+    #[cfg(target_os = "zkvm")]
+    risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
+        .expect("Invalid vote proof");
+}
+
 pub fn handle(
     accounts: &[AccountWithMetadata],
     _proposal_index: u64,
+    vote_receipt: &[u32],
+    _nullifier: [u8; 32],
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
-    assert!(accounts.len() >= 3, "Execute requires at least multisig_state + executor + proposal");
+    assert!(accounts.len() >= 2, "Execute requires at least multisig_state + proposal");
 
     let multisig_account = &accounts[0];
-    let executor_account = &accounts[1];
-    let proposal_account = &accounts[2];
-    let target_accounts = &accounts[3..];
+    let proposal_account = &accounts[1];
+    let target_accounts = &accounts[2..];
 
-    assert!(executor_account.is_authorized, "Executor must sign the transaction");
+    // Verify the ZK proof of membership
+    verify_vote_proof(vote_receipt);
 
     // Read multisig state
     let state_data: Vec<u8> = multisig_account.account.data.clone().into();
     let state: MultisigState = borsh::from_slice(&state_data)
         .expect("Failed to deserialize multisig state");
-
-    let executor_id = *executor_account.account_id.value();
-    assert!(state.is_member(&executor_id), "Executor is not a multisig member");
 
     // Read proposal
     let proposal_data: Vec<u8> = proposal_account.account.data.clone().into();
@@ -42,7 +53,7 @@ pub fn handle(
     assert_eq!(proposal.multisig_create_key, state.create_key, "Proposal does not belong to this multisig");
     assert_eq!(proposal.status, ProposalStatus::Active, "Proposal is not active");
     assert!(
-        proposal.has_threshold(state.threshold),
+        proposal.approved.len() >= state.threshold as usize,
         "Proposal does not have enough approvals: need {}, have {}",
         state.threshold,
         proposal.approved.len()
@@ -92,12 +103,10 @@ pub fn handle(
 
     // Multisig state unchanged
     let multisig_post = multisig_account.account.clone();
-    let executor_post = executor_account.account.clone();
 
-    // Post states for: multisig, executor, proposal, then all target accounts passed through
+    // Post states for: multisig, proposal, then all target accounts passed through
     let mut post_states = vec![
         AccountPostState::new(multisig_post),
-        AccountPostState::new(executor_post),
         AccountPostState::new(proposal_post),
     ];
 
@@ -117,13 +126,13 @@ mod tests {
     use nssa_core::NullifierPublicKey;
     use multisig_core::{MultisigState, Proposal, ProposalStatus};
 
-    fn make_account(id: &[u8; 32], data: Vec<u8>, authorized: bool) -> AccountWithMetadata {
+    fn make_account(id: &[u8; 32], data: Vec<u8>) -> AccountWithMetadata {
         let mut account = Account::default();
         account.data = data.try_into().unwrap();
         AccountWithMetadata {
             account_id: AccountId::new(*id),
             account,
-            is_authorized: authorized,
+            is_authorized: false,
         }
     }
 
@@ -135,7 +144,7 @@ mod tests {
         let fake_program_id: ProgramId = [42u32; 8];
         let mut proposal = Proposal::new(
             1,
-            approvals[0],
+            [0u8; 32], // proposer identity is private
             approvals[0], // proposer_nullifier
             [0u8; 32],
             fake_program_id,
@@ -157,21 +166,21 @@ mod tests {
         // 2 approvals (member 1 auto, member 2 added)
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32], [2u8; 32]], 1);
 
+        let nullifier = [7u8; 32];
         let accounts = vec![
-            make_account(&[10u8; 32], state_data, false),   // multisig state
-            make_account(&[1u8; 32], vec![], true),           // executor (member)
-            make_account(&[20u8; 32], proposal_data, false),  // proposal PDA
-            make_account(&[30u8; 32], vec![], false),          // target account
+            make_account(&[10u8; 32], state_data),           // multisig state
+            make_account(&[20u8; 32], proposal_data),        // proposal PDA
+            make_account(&[30u8; 32], vec![]),                // target account
         ];
 
-        let (post_states, chained) = handle(&accounts, 1);
+        let (post_states, chained) = handle(&accounts, 1, &[], nullifier);
 
         assert_eq!(chained.len(), 1);
-        assert_eq!(post_states.len(), 4);
+        assert_eq!(post_states.len(), 3);
 
         // Proposal should be marked executed
         let proposal: Proposal = borsh::from_slice(
-            &Vec::from(post_states[2].account().data.clone())
+            &Vec::from(post_states[1].account().data.clone())
         ).unwrap();
         assert_eq!(proposal.status, ProposalStatus::Executed);
 
@@ -188,14 +197,14 @@ mod tests {
         // Only 1 approval (proposer only)
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32]], 1);
 
+        let nullifier = [7u8; 32];
         let accounts = vec![
-            make_account(&[10u8; 32], state_data, false),
-            make_account(&[1u8; 32], vec![], true),
-            make_account(&[20u8; 32], proposal_data, false),
-            make_account(&[30u8; 32], vec![], false),
+            make_account(&[10u8; 32], state_data),
+            make_account(&[20u8; 32], proposal_data),
+            make_account(&[30u8; 32], vec![]),
         ];
 
-        handle(&accounts, 1);
+        handle(&accounts, 1, &[], nullifier);
     }
 
     #[test]
@@ -205,31 +214,14 @@ mod tests {
         let state_data = make_state(2, members);
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32], [2u8; 32]], 1);
 
+        let nullifier = [7u8; 32];
         // Missing the target account
         let accounts = vec![
-            make_account(&[10u8; 32], state_data, false),
-            make_account(&[1u8; 32], vec![], true),
-            make_account(&[20u8; 32], proposal_data, false),
+            make_account(&[10u8; 32], state_data),
+            make_account(&[20u8; 32], proposal_data),
             // no target account!
         ];
 
-        handle(&accounts, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "not a multisig member")]
-    fn test_execute_non_member_fails() {
-        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32])];
-        let state_data = make_state(2, members);
-        let proposal_data = make_proposal_with_approvals(vec![[1u8; 32], [2u8; 32]], 1);
-
-        let accounts = vec![
-            make_account(&[10u8; 32], state_data, false),
-            make_account(&[99u8; 32], vec![], true), // NOT a member
-            make_account(&[20u8; 32], proposal_data, false),
-            make_account(&[30u8; 32], vec![], false),
-        ];
-
-        handle(&accounts, 1);
+        handle(&accounts, 1, &[], nullifier);
     }
 }

@@ -27,6 +27,8 @@ pub fn process(
             target_account_count,
             pda_seeds,
             authorized_indices,
+            vote_receipt,
+            nullifier,
         } => propose::handle(
             accounts,
             target_program_id,
@@ -34,18 +36,20 @@ pub fn process(
             *target_account_count,
             pda_seeds,
             authorized_indices,
+            vote_receipt,
+            *nullifier,
         ),
 
-        Instruction::Approve { proposal_index } => {
-            approve::handle(accounts, *proposal_index)
+        Instruction::Approve { proposal_index, vote_receipt, nullifier } => {
+            approve::handle(accounts, *proposal_index, vote_receipt, *nullifier)
         }
 
-        Instruction::Reject { proposal_index } => {
-            reject::handle(accounts, *proposal_index)
+        Instruction::Reject { proposal_index, vote_receipt, nullifier } => {
+            reject::handle(accounts, *proposal_index, vote_receipt, *nullifier)
         }
 
-        Instruction::Execute { proposal_index } => {
-            execute::handle(accounts, *proposal_index)
+        Instruction::Execute { proposal_index, vote_receipt, nullifier } => {
+            execute::handle(accounts, *proposal_index, vote_receipt, *nullifier)
         }
     }
 }
