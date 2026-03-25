@@ -216,7 +216,7 @@ async fn test_multisig_token_transfer() {
     let instruction = Instruction::CreateMultisig {
         create_key,
         threshold: 2,
-        members: vec![*m1.value(), *m2.value(), *m3.value()],
+        members: vec![nssa_core::NullifierPublicKey(*m1.value()), nssa_core::NullifierPublicKey(*m2.value()), nssa_core::NullifierPublicKey(*m3.value())],
     };
     let msg = Message::try_new(
         multisig_program_id,

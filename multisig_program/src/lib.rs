@@ -3,6 +3,7 @@ pub mod propose;
 pub mod approve;
 pub mod reject;
 pub mod execute;
+pub mod approve_circuit;
 
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};

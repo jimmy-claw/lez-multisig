@@ -3267,7 +3267,6 @@ dependencies = [
  "borsh",
  "multisig_core",
  "multisig_program",
- "nssa-framework",
  "nssa_core",
  "risc0-zkvm",
 ]
@@ -3294,7 +3293,6 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "multisig_core",
- "nssa-framework",
  "nssa_core",
  "risc0-zkvm",
  "serde",
@@ -3370,42 +3368,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "nssa-framework"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
-dependencies = [
- "borsh",
- "nssa-framework-core",
- "nssa-framework-macros",
- "nssa_core",
-]
-
-[[package]]
-name = "nssa-framework-core"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "nssa-framework-macros"
-version = "0.1.0"
-source = "git+https://github.com/jimmy-claw/nssa-framework.git#8b61cabda2fdfd556f38f7c7f2ce6acb8e788858"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "nssa_core"
 version = "0.1.0"
-source = "git+https://github.com/logos-blockchain/lssa.git?branch=main#bc84d5cf31b3f6967060c35a5b98618d99780ade"
 dependencies = [
  "base58",
  "borsh",

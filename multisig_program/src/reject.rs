@@ -69,6 +69,7 @@ mod tests {
     use super::*;
     use nssa_core::account::{Account, AccountId};
     use nssa_core::program::ProgramId;
+    use nssa_core::NullifierPublicKey;
     use multisig_core::MultisigState;
 
     fn make_account(id: &[u8; 32], data: Vec<u8>, authorized: bool) -> AccountWithMetadata {
@@ -81,7 +82,7 @@ mod tests {
         }
     }
 
-    fn make_multisig_state(threshold: u8, members: Vec<[u8; 32]>) -> Vec<u8> {
+    fn make_multisig_state(threshold: u8, members: Vec<NullifierPublicKey>) -> Vec<u8> {
         let mut state = MultisigState::new([0u8; 32], threshold, members);
         state.transaction_index = 1;
         borsh::to_vec(&state).unwrap()
@@ -92,6 +93,7 @@ mod tests {
         let proposal = Proposal::new(
             1,
             proposer,
+            proposer, // proposer_nullifier
             [0u8; 32],
             fake_program_id,
             vec![0u32],
@@ -104,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_reject_adds_rejection() {
-        let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32]), NullifierPublicKey([3u8; 32])];
         let state_data = make_multisig_state(2, members);
         let proposal_data = make_proposal([1u8; 32]);
 
@@ -123,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_reject_auto_marks_dead_proposal() {
-        let members = vec![[1u8; 32], [2u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32])];
         let state_data = make_multisig_state(2, members);
         let proposal_data = make_proposal([1u8; 32]);
 

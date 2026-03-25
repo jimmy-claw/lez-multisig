@@ -13,6 +13,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use nssa_core::account::AccountId;
 use nssa_core::program::{InstructionData, PdaSeed, ProgramId};
+use nssa_core::NullifierPublicKey;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -35,8 +36,9 @@ pub enum Instruction {
         create_key: [u8; 32],
         /// Required signatures for execution (M)
         threshold: u8,
-        /// List of member account IDs (32 bytes each, derived from public keys)
-        members: Vec<[u8; 32]>,
+        /// List of member nullifier public keys (NPKs).
+        /// Members prove membership via ZK proof of NSK knowledge.
+        members: Vec<NullifierPublicKey>,
     },
 
     /// Create a new proposal (any member can propose).
@@ -93,8 +95,10 @@ pub enum ProposalStatus {
 pub struct Proposal {
     /// Unique index (matches MultisigState.transaction_index at creation time)
     pub index: u64,
-    /// Who proposed it
+    /// Who proposed it (account ID or identifier)
     pub proposer: [u8; 32],
+    /// Nullifier committed by the proposer (derived via Nullifier::for_vote)
+    pub proposer_nullifier: [u8; 32],
     /// The create_key of the parent multisig (for verification)
     pub multisig_create_key: [u8; 32],
 
@@ -111,9 +115,10 @@ pub struct Proposal {
     pub authorized_indices: Vec<u8>,
 
     // -- Voting state --
-    /// Account IDs that have approved (proposer auto-approves)
+    /// Vote nullifiers of members who approved (proposer's nullifier included at creation).
+    /// Each entry is a nullifier derived from the member's NSK + proposal_index.
     pub approved: Vec<[u8; 32]>,
-    /// Account IDs that have rejected
+    /// Vote nullifiers of members who rejected.
     pub rejected: Vec<[u8; 32]>,
     /// Current status
     pub status: ProposalStatus,
@@ -123,6 +128,7 @@ impl Proposal {
     pub fn new(
         index: u64,
         proposer: [u8; 32],
+        proposer_nullifier: [u8; 32],
         multisig_create_key: [u8; 32],
         target_program_id: ProgramId,
         target_instruction_data: InstructionData,
@@ -133,13 +139,14 @@ impl Proposal {
         Self {
             index,
             proposer,
+            proposer_nullifier,
             multisig_create_key,
             target_program_id,
             target_instruction_data,
             target_account_count,
             pda_seeds,
             authorized_indices,
-            approved: vec![proposer],
+            approved: vec![proposer_nullifier],
             rejected: vec![],
             status: ProposalStatus::Active,
         }
@@ -189,14 +196,15 @@ pub struct MultisigState {
     pub threshold: u8,
     /// Number of members (N)
     pub member_count: u8,
-    /// List of member account IDs
-    pub members: Vec<[u8; 32]>,
+    /// List of member nullifier public keys (NPKs).
+    /// Members prove membership via ZK proof of NSK knowledge.
+    pub members: Vec<NullifierPublicKey>,
     /// Transaction/proposal counter (incremented on each Propose)
     pub transaction_index: u64,
 }
 
 impl MultisigState {
-    pub fn new(create_key: [u8; 32], threshold: u8, members: Vec<[u8; 32]>) -> Self {
+    pub fn new(create_key: [u8; 32], threshold: u8, members: Vec<NullifierPublicKey>) -> Self {
         let member_count = members.len() as u8;
         Self {
             create_key,
@@ -207,8 +215,15 @@ impl MultisigState {
         }
     }
 
+    /// Check if the given raw bytes match any member NPK.
+    /// Temporary compatibility shim — Day 2 replaces membership checks with ZK proofs.
     pub fn is_member(&self, id: &[u8; 32]) -> bool {
-        self.members.contains(id)
+        self.members.iter().any(|npk| npk.0 == *id)
+    }
+
+    /// Check if the given NPK is a member.
+    pub fn is_member_npk(&self, npk: &NullifierPublicKey) -> bool {
+        self.members.contains(npk)
     }
 
     /// Increment and return the next proposal index

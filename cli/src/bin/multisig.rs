@@ -312,7 +312,7 @@ async fn main() {
             let instruction = Instruction::CreateMultisig {
                 create_key: ck,
                 threshold,
-                members: members.iter().map(|id| *id.value()).collect(),
+                members: members.iter().map(|id| nssa_core::NullifierPublicKey(*id.value())).collect(),
             };
 
             // Account list: [state_pda, member1, member2, ..., memberN]

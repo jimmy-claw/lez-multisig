@@ -114,6 +114,7 @@ mod tests {
     use super::*;
     use nssa_core::account::{Account, AccountId};
     use nssa_core::program::ProgramId;
+    use nssa_core::NullifierPublicKey;
     use multisig_core::{MultisigState, Proposal, ProposalStatus};
 
     fn make_account(id: &[u8; 32], data: Vec<u8>, authorized: bool) -> AccountWithMetadata {
@@ -126,7 +127,7 @@ mod tests {
         }
     }
 
-    fn make_state(threshold: u8, members: Vec<[u8; 32]>) -> Vec<u8> {
+    fn make_state(threshold: u8, members: Vec<NullifierPublicKey>) -> Vec<u8> {
         borsh::to_vec(&MultisigState::new([0u8; 32], threshold, members)).unwrap()
     }
 
@@ -135,6 +136,7 @@ mod tests {
         let mut proposal = Proposal::new(
             1,
             approvals[0],
+            approvals[0], // proposer_nullifier
             [0u8; 32],
             fake_program_id,
             vec![0u32],
@@ -150,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_execute_emits_chained_call() {
-        let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32]), NullifierPublicKey([3u8; 32])];
         let state_data = make_state(2, members);
         // 2 approvals (member 1 auto, member 2 added)
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32], [2u8; 32]], 1);
@@ -181,7 +183,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "enough approvals")]
     fn test_execute_below_threshold_fails() {
-        let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32]), NullifierPublicKey([3u8; 32])];
         let state_data = make_state(2, members);
         // Only 1 approval (proposer only)
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32]], 1);
@@ -199,7 +201,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Expected 1 target accounts, got 0")]
     fn test_execute_wrong_account_count_fails() {
-        let members = vec![[1u8; 32], [2u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32])];
         let state_data = make_state(2, members);
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32], [2u8; 32]], 1);
 
@@ -217,7 +219,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "not a multisig member")]
     fn test_execute_non_member_fails() {
-        let members = vec![[1u8; 32], [2u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32])];
         let state_data = make_state(2, members);
         let proposal_data = make_proposal_with_approvals(vec![[1u8; 32], [2u8; 32]], 1);
 

@@ -45,6 +45,7 @@ pub fn handle(
     let proposal = Proposal::new(
         proposal_index,
         proposer_id,
+        [0u8; 32], // TODO(Day 2): compute proposer nullifier from ZK proof
         state.create_key,
         target_program_id.clone(),
         target_instruction_data.clone(),
@@ -79,6 +80,7 @@ pub fn handle(
 mod tests {
     use super::*;
     use nssa_core::account::{Account, AccountId};
+    use nssa_core::NullifierPublicKey;
     use multisig_core::MultisigState;
 
     fn make_account(id: &[u8; 32], data: Vec<u8>, authorized: bool) -> AccountWithMetadata {
@@ -91,13 +93,13 @@ mod tests {
         }
     }
 
-    fn make_state(threshold: u8, members: Vec<[u8; 32]>) -> Vec<u8> {
+    fn make_state(threshold: u8, members: Vec<NullifierPublicKey>) -> Vec<u8> {
         borsh::to_vec(&MultisigState::new([0u8; 32], threshold, members)).unwrap()
     }
 
     #[test]
     fn test_propose_creates_proposal_and_increments_index() {
-        let members = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32]), NullifierPublicKey([3u8; 32])];
         let state_data = make_state(2, members.clone());
 
         let accounts = vec![
@@ -125,20 +127,20 @@ mod tests {
         ).unwrap();
         assert_eq!(state.transaction_index, 1);
 
-        // Proposal should exist with proposer auto-approved
+        // Proposal should exist with proposer auto-approved (via proposer_nullifier)
         let proposal: Proposal = borsh::from_slice(
             &Vec::from(post_states[2].account().data.clone())
         ).unwrap();
         assert_eq!(proposal.index, 1);
         assert_eq!(proposal.proposer, [1u8; 32]);
-        assert_eq!(proposal.approved, vec![[1u8; 32]]);
+        assert_eq!(proposal.approved, vec![[0u8; 32]]); // proposer_nullifier placeholder
         assert_eq!(proposal.status, multisig_core::ProposalStatus::Active);
     }
 
     #[test]
     #[should_panic(expected = "not a multisig member")]
     fn test_propose_non_member_fails() {
-        let members = vec![[1u8; 32], [2u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32])];
         let state_data = make_state(2, members);
 
         let accounts = vec![
@@ -154,7 +156,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "must sign")]
     fn test_propose_unsigned_fails() {
-        let members = vec![[1u8; 32], [2u8; 32]];
+        let members = vec![NullifierPublicKey([1u8; 32]), NullifierPublicKey([2u8; 32])];
         let state_data = make_state(2, members);
 
         let accounts = vec![
