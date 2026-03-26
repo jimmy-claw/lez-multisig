@@ -48,7 +48,7 @@ mod multisig_program {
             ("proposal_index", "u64", "arg:proposal_index"),
             ("domain", "string", "literal:propose"),
         ],
-        outputs = [vote_receipt, nullifier]
+        outputs = [nullifier, vote_receipt]
     )]
     pub fn propose(
         #[account(mut, pda = arg("create_key"))]
@@ -93,7 +93,7 @@ mod multisig_program {
             ("proposal_index", "u64", "arg:proposal_index"),
             ("domain", "string", "literal:approve"),
         ],
-        outputs = [vote_receipt, nullifier]
+        outputs = [nullifier, vote_receipt]
     )]
     pub fn approve(
         #[account(mut)]
@@ -125,7 +125,7 @@ mod multisig_program {
             ("proposal_index", "u64", "arg:proposal_index"),
             ("domain", "string", "literal:reject"),
         ],
-        outputs = [vote_receipt, nullifier]
+        outputs = [nullifier, vote_receipt]
     )]
     pub fn reject(
         #[account(mut)]
