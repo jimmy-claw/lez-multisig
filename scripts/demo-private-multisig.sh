@@ -93,14 +93,21 @@ echo "  Member 3: $MEMBER3 -> NPK=${NPK3:0:16}..."
 # ── Step 3: Create 2-of-3 multisig ────────────────────────────────────────
 banner "Step 3: Create 2-of-3 multisig"
 
-CREATE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" create-multisig \
-    --threshold 2 \
-    --members "$NPK1" "$NPK2" "$NPK3" 2>&1)
-echo "$CREATE_OUTPUT"
+SIGNER=$($WALLET account list 2>&1 | grep -oP 'Public/[A-Za-z0-9]+' | head -1)
+CREATE_KEY=$(openssl rand -hex 32)
+MULTISIG_BIN="$GUEST_ELF_DIR/multisig.bin"
+echo "  Signer: $SIGNER"
+echo "  Create key: ${CREATE_KEY:0:16}..."
 
-CREATE_KEY=$(echo "$CREATE_OUTPUT" | grep -oP 'create_key:\s*\K\S+')
-[ -n "$CREATE_KEY" ] || die "Failed to extract create key"
-echo "  Multisig create key: $CREATE_KEY"
+CREATE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" \
+    --program "$MULTISIG_BIN" \
+    create-multisig \
+    --create-key "$CREATE_KEY" \
+    --threshold 2 \
+    --members "$NPK1,$NPK2,$NPK3" \
+    --member-accounts "$SIGNER" 2>&1)
+echo "$CREATE_OUTPUT"
+echo "  Multisig create key: ${CREATE_KEY:0:16}..."
 
 echo "  Waiting for tx inclusion..."
 sleep 10

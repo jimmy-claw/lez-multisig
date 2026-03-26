@@ -169,6 +169,28 @@
       "name": "propose",
       "pre_tx": {
         "elf": "vote_circuit.bin",
+        "inputs": [
+          {
+            "name": "nsk",
+            "source": "wallet_nsk",
+            "type_": "bytes32"
+          },
+          {
+            "name": "members",
+            "source": "arg:members",
+            "type_": "vec_bytes32"
+          },
+          {
+            "name": "proposal_index",
+            "source": "arg:proposal_index",
+            "type_": "u64"
+          },
+          {
+            "name": "domain",
+            "source": "literal:propose",
+            "type_": "string"
+          }
+        ],
         "outputs": [
           "vote_receipt",
           "nullifier"
@@ -251,6 +273,28 @@
       "name": "approve",
       "pre_tx": {
         "elf": "vote_circuit.bin",
+        "inputs": [
+          {
+            "name": "nsk",
+            "source": "wallet_nsk",
+            "type_": "bytes32"
+          },
+          {
+            "name": "members",
+            "source": "arg:members",
+            "type_": "vec_bytes32"
+          },
+          {
+            "name": "proposal_index",
+            "source": "arg:proposal_index",
+            "type_": "u64"
+          },
+          {
+            "name": "domain",
+            "source": "literal:approve",
+            "type_": "string"
+          }
+        ],
         "outputs": [
           "vote_receipt",
           "nullifier"
@@ -333,6 +377,28 @@
       "name": "reject",
       "pre_tx": {
         "elf": "vote_circuit.bin",
+        "inputs": [
+          {
+            "name": "nsk",
+            "source": "wallet_nsk",
+            "type_": "bytes32"
+          },
+          {
+            "name": "members",
+            "source": "arg:members",
+            "type_": "vec_bytes32"
+          },
+          {
+            "name": "proposal_index",
+            "source": "arg:proposal_index",
+            "type_": "u64"
+          },
+          {
+            "name": "domain",
+            "source": "literal:reject",
+            "type_": "string"
+          }
+        ],
         "outputs": [
           "vote_receipt",
           "nullifier"
