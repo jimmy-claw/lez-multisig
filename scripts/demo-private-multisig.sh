@@ -366,3 +366,53 @@ echo "    - Private multisig governs ANY LEZ program via ChainedCall"
 echo "    - token-idl.json drives serialization — fully composable"
 echo "    - ZK proofs enforce membership — no trusted executor"
 echo ""
+
+# ── On-Chain Privacy Trace ────────────────────────────────────────────────
+echo ""
+echo "================================================================"
+echo "  What an on-chain observer sees"
+echo "================================================================"
+echo ""
+
+# Extract nullifiers and tx hashes from outputs
+PROPOSE_TX=$(echo "$PROPOSE_OUTPUT" | grep 'tx_hash:' | awk '{print $2}')
+PROPOSE_NUL=$(echo "$PROPOSE_OUTPUT" | grep 'nullifier =' | head -1 | awk '{print $3}' | cut -c1-18)
+APPROVE1_TX=$(echo "$APPROVE1_OUTPUT" | grep 'tx_hash:' | awk '{print $2}')
+APPROVE1_NUL=$(echo "$APPROVE1_OUTPUT" | grep 'nullifier =' | head -1 | awk '{print $3}' | cut -c1-18)
+APPROVE2_TX=$(echo "$APPROVE2_OUTPUT" | grep 'tx_hash:' | awk '{print $2}')
+APPROVE2_NUL=$(echo "$APPROVE2_OUTPUT" | grep 'nullifier =' | head -1 | awk '{print $3}' | cut -c1-18)
+
+echo "  BLOCK CHAIN (public)"
+echo "  ┌─────────────────────────────────────────────────────────┐"
+echo "  │ create_multisig                                         │"
+echo "  │   members: [NPK₁=${NPK1:0:8}…, NPK₂=${NPK2:0:8}…, NPK₃=${NPK3:0:8}…]  │"
+echo "  │   threshold: 2-of-3                                     │"
+echo "  ├─────────────────────────────────────────────────────────┤"
+echo "  │ propose (tx: ${PROPOSE_TX:0:12}…)                       │"
+echo "  │   nullifier: ${PROPOSE_NUL}…               │"
+echo "  │   target: transfer 200 LEZToken                         │"
+echo "  ├─────────────────────────────────────────────────────────┤"
+echo "  │ approve (tx: ${APPROVE1_TX:0:12}…)                      │"
+echo "  │   nullifier: ${APPROVE1_NUL}…              │"
+echo "  ├─────────────────────────────────────────────────────────┤"
+echo "  │ approve (tx: ${APPROVE2_TX:0:12}…)                      │"
+echo "  │   nullifier: ${APPROVE2_NUL}…              │"
+echo "  ├─────────────────────────────────────────────────────────┤"
+echo "  │ execute → ChainedCall → transfer(200) → recipient       │"
+echo "  └─────────────────────────────────────────────────────────┘"
+echo ""
+echo "  WHAT OBSERVER KNOWS:"
+echo "    ✅ 2 of 3 members approved (threshold met)"
+echo "    ✅ 200 LEZToken moved vault → recipient"
+echo "    ✅ Each nullifier is unique (no double-voting)"
+echo ""
+echo "  WHAT OBSERVER CANNOT KNOW:"
+echo "    ❌ Which member proposed (nullifier ≠ identity)"
+echo "    ❌ Which 2 of 3 members approved"
+echo "    ❌ The NSKs (zero-knowledge witness, never on-chain)"
+echo "    ❌ Link between NPK and real-world identity"
+echo ""
+echo "  To deanonymize, an attacker would need:"
+echo "    → All 3 NSKs + proposal context to brute-force nullifiers"
+echo "    → OR compromise the client-side key derivation"
+echo ""
