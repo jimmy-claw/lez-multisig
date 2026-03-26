@@ -5,12 +5,15 @@ pub mod approve;
 pub mod reject;
 pub mod execute;
 
-use nssa_core::program::{InstructionData, ProgramId};
+use nssa_core::program::ProgramId;
 use multisig_core::ConfigAction;
-use lez_framework::prelude::*;
+use spel_framework::prelude::*;
 
 /// Multisig program using #[lez_program] macro.
 /// Uses external multisig_core::Instruction enum for dispatch.
+///
+/// LP-0002: propose/approve/reject use #[pre_tx_hook] for ZK-based private voting.
+/// Members prove membership via vote_circuit ZK proofs instead of signer checks.
 #[lez_program(instruction = "multisig_core::Instruction")]
 mod multisig_program {
     use super::*;
@@ -25,24 +28,34 @@ mod multisig_program {
         create_key: [u8; 32],
         threshold: u8,
         members: Vec<[u8; 32]>,
-    ) -> LezResult {
+    ) -> SpelResult {
         let accounts: Vec<AccountWithMetadata> = std::iter::once(multisig_state)
             .chain(member_accounts.into_iter())
             .collect();
         let (post_states, chained_calls) =
             crate::create_multisig::handle(&accounts, &create_key, threshold, &members);
-        Ok(LezOutput { post_states, chained_calls })
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Propose a new transaction.
-    /// proposer must be a member signer. proposal is initialized as a new PDA.
+    /// Membership proven via ZK proof (vote_circuit).
+    /// No signer account — the #[pre_tx_hook] generates and verifies the proof.
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
+    #[pre_tx_hook(
+        signer = "caller",
+        elf = "vote_circuit.bin",
+        inputs = [
+            ("nsk", "bytes32", "wallet_nsk"),
+            ("members", "vec_bytes32", "arg:members"),
+            ("proposal_index", "u64", "arg:proposal_index"),
+            ("domain", "string", "literal:propose"),
+        ],
+        outputs = [vote_receipt, nullifier]
+    )]
     pub fn propose(
-        #[account(mut)]
+        #[account(mut, pda = arg("create_key"))]
         multisig_state: AccountWithMetadata,
-        #[account(signer)]
-        proposer: AccountWithMetadata,
         #[account(init, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
         proposal: AccountWithMetadata,
         target_program_id: ProgramId,
@@ -52,8 +65,11 @@ mod multisig_program {
         authorized_indices: Vec<u8>,
         create_key: [u8; 32],
         proposal_index: u64,
-    ) -> LezResult {
-        let accounts = vec![multisig_state, proposer, proposal];
+        members: Vec<[u8; 32]>,
+        vote_receipt: Vec<u32>,
+        nullifier: [u8; 32],
+    ) -> SpelResult {
+        let accounts = vec![multisig_state, proposal];
         let (post_states, chained_calls) = crate::propose::handle(
             &accounts,
             &target_program_id,
@@ -61,70 +77,94 @@ mod multisig_program {
             target_account_count,
             &pda_seeds,
             &authorized_indices,
+            &vote_receipt,
+            nullifier,
         );
-        Ok(LezOutput { post_states, chained_calls })
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Approve an existing proposal.
-    /// approver must be a member signer.
+    /// Membership proven via ZK proof (vote_circuit).
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
+    #[pre_tx_hook(
+        signer = "caller",
+        elf = "vote_circuit.bin",
+        inputs = [
+            ("nsk", "bytes32", "wallet_nsk"),
+            ("members", "vec_bytes32", "arg:members"),
+            ("proposal_index", "u64", "arg:proposal_index"),
+            ("domain", "string", "literal:approve"),
+        ],
+        outputs = [vote_receipt, nullifier]
+    )]
     pub fn approve(
         #[account(mut)]
         multisig_state: AccountWithMetadata,
-        #[account(signer)]
-        approver: AccountWithMetadata,
         #[account(mut, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
         proposal: AccountWithMetadata,
         proposal_index: u64,
         create_key: [u8; 32],
-    ) -> LezResult {
-        let accounts = vec![multisig_state, approver, proposal];
+        members: Vec<[u8; 32]>,
+        vote_receipt: Vec<u32>,
+        nullifier: [u8; 32],
+    ) -> SpelResult {
+        let accounts = vec![multisig_state, proposal];
         let (post_states, chained_calls) =
-            crate::approve::handle(&accounts, proposal_index);
-        Ok(LezOutput { post_states, chained_calls })
+            crate::approve::handle(&accounts, proposal_index, &vote_receipt, nullifier);
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Reject an existing proposal.
-    /// rejector must be a member signer.
+    /// Membership proven via ZK proof (vote_circuit).
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
+    #[pre_tx_hook(
+        signer = "caller",
+        elf = "vote_circuit.bin",
+        inputs = [
+            ("nsk", "bytes32", "wallet_nsk"),
+            ("members", "vec_bytes32", "arg:members"),
+            ("proposal_index", "u64", "arg:proposal_index"),
+            ("domain", "string", "literal:reject"),
+        ],
+        outputs = [vote_receipt, nullifier]
+    )]
     pub fn reject(
         #[account(mut)]
         multisig_state: AccountWithMetadata,
-        #[account(signer)]
-        rejector: AccountWithMetadata,
         #[account(mut, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
         proposal: AccountWithMetadata,
         proposal_index: u64,
         create_key: [u8; 32],
-    ) -> LezResult {
-        let accounts = vec![multisig_state, rejector, proposal];
+        members: Vec<[u8; 32]>,
+        vote_receipt: Vec<u32>,
+        nullifier: [u8; 32],
+    ) -> SpelResult {
+        let accounts = vec![multisig_state, proposal];
         let (post_states, chained_calls) =
-            crate::reject::handle(&accounts, proposal_index);
-        Ok(LezOutput { post_states, chained_calls })
+            crate::reject::handle(&accounts, proposal_index, &vote_receipt, nullifier);
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Execute a fully-approved proposal.
-    /// executor must be a member signer. target_accounts are the rest accounts.
+    /// No ZK proof needed — anyone can execute once threshold is met.
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
     pub fn execute(
         #[account(mut)]
         multisig_state: AccountWithMetadata,
-        #[account(signer)]
-        executor: AccountWithMetadata,
         #[account(mut, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
         proposal: AccountWithMetadata,
         target_accounts: Vec<AccountWithMetadata>,
         proposal_index: u64,
         create_key: [u8; 32],
-    ) -> LezResult {
-        let mut accounts = vec![multisig_state, executor, proposal];
+    ) -> SpelResult {
+        let mut accounts = vec![multisig_state, proposal];
         accounts.extend(target_accounts);
         let (post_states, chained_calls) =
             crate::execute::handle(&accounts, proposal_index);
-        Ok(LezOutput { post_states, chained_calls })
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Propose adding a new member.
@@ -141,13 +181,13 @@ mod multisig_program {
         new_member: [u8; 32],
         create_key: [u8; 32],
         proposal_index: u64,
-    ) -> LezResult {
+    ) -> SpelResult {
         let accounts = vec![multisig_state, proposer, proposal];
         let (post_states, chained_calls) = crate::propose_config::handle(
             &accounts,
             ConfigAction::AddMember { new_member },
         );
-        Ok(LezOutput { post_states, chained_calls })
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Propose removing a member.
@@ -164,13 +204,13 @@ mod multisig_program {
         member: [u8; 32],
         create_key: [u8; 32],
         proposal_index: u64,
-    ) -> LezResult {
+    ) -> SpelResult {
         let accounts = vec![multisig_state, proposer, proposal];
         let (post_states, chained_calls) = crate::propose_config::handle(
             &accounts,
             ConfigAction::RemoveMember { member },
         );
-        Ok(LezOutput { post_states, chained_calls })
+        Ok(SpelOutput { post_states, chained_calls })
     }
 
     /// Propose changing the threshold.
@@ -187,13 +227,13 @@ mod multisig_program {
         new_threshold: u8,
         create_key: [u8; 32],
         proposal_index: u64,
-    ) -> LezResult {
+    ) -> SpelResult {
         let accounts = vec![multisig_state, proposer, proposal];
         let (post_states, chained_calls) = crate::propose_config::handle(
             &accounts,
             ConfigAction::ChangeThreshold { new_threshold },
         );
-        Ok(LezOutput { post_states, chained_calls })
+        Ok(SpelOutput { post_states, chained_calls })
     }
 }
 
@@ -208,11 +248,14 @@ pub fn process(
     match instruction {
         Instruction::CreateMultisig { create_key, threshold, members } =>
             create_multisig::handle(accounts, create_key, *threshold, members),
-        Instruction::Propose { target_program_id, target_instruction_data, target_account_count, pda_seeds, authorized_indices, .. } =>
-            propose::handle(accounts, target_program_id, target_instruction_data, *target_account_count, pda_seeds, authorized_indices),
-        Instruction::Approve { proposal_index, .. } => approve::handle(accounts, *proposal_index),
-        Instruction::Reject { proposal_index, .. } => reject::handle(accounts, *proposal_index),
-        Instruction::Execute { proposal_index, .. } => execute::handle(accounts, *proposal_index),
+        Instruction::Propose { target_program_id, target_instruction_data, target_account_count, pda_seeds, authorized_indices, vote_receipt, nullifier, .. } =>
+            propose::handle(accounts, target_program_id, target_instruction_data, *target_account_count, pda_seeds, authorized_indices, vote_receipt, *nullifier),
+        Instruction::Approve { proposal_index, vote_receipt, nullifier, .. } =>
+            approve::handle(accounts, *proposal_index, vote_receipt, *nullifier),
+        Instruction::Reject { proposal_index, vote_receipt, nullifier, .. } =>
+            reject::handle(accounts, *proposal_index, vote_receipt, *nullifier),
+        Instruction::Execute { proposal_index, .. } =>
+            execute::handle(accounts, *proposal_index),
         Instruction::ProposeAddMember { new_member, .. } =>
             propose_config::handle(accounts, ConfigAction::AddMember { new_member: *new_member }),
         Instruction::ProposeRemoveMember { member, .. } =>
