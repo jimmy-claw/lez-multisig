@@ -24,14 +24,11 @@ mod multisig_program {
     pub fn create_multisig(
         #[account(init, pda = arg("create_key"))]
         multisig_state: AccountWithMetadata,
-        member_accounts: Vec<AccountWithMetadata>,
         create_key: [u8; 32],
         threshold: u8,
         members: Vec<[u8; 32]>,
     ) -> SpelResult {
-        let accounts: Vec<AccountWithMetadata> = std::iter::once(multisig_state)
-            .chain(member_accounts.into_iter())
-            .collect();
+        let accounts = vec![multisig_state];
         let (post_states, chained_calls) =
             crate::create_multisig::handle(&accounts, &create_key, threshold, &members);
         Ok(SpelOutput { post_states, chained_calls })

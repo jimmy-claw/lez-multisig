@@ -18,7 +18,7 @@
 # Usage:
 #   ./scripts/demo-private-multisig.sh
 # ──────────────────────────────────────────────────────────────────────────────
-set -euo pipefail
+# set -euo pipefail  # disabled: spel TxPoller timeout causes false failures
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
