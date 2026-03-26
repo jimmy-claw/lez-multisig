@@ -72,6 +72,9 @@ cargo build --release 2>&1 | tail -5
 echo "  Guest ELF dir: $GUEST_ELF_DIR"
 echo "  Vote circuit ELF: $SPEL_GUEST_ELF"
 
+  echo "  Generating IDL..."
+  (cd "$PROJECT_DIR" && source $HOME/.cargo/env && cargo run -p lez-multisig-idl-gen > "$IDL_FILE" 2>/dev/null && echo "  IDL generated: $IDL_FILE")
+
 # ── Step 2: Create 3 private member accounts ──────────────────────────────
 banner "Step 2: Create 3 member accounts (private)"
 
@@ -79,9 +82,9 @@ MEMBER1=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+' | head -1)
 MEMBER2=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+' | head -1)
 MEMBER3=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+' | head -1)
 
-NPK1=$($WALLET account get --keys --account-id $MEMBER1 2>&1 | grep 'With npk' | awk '{print $3}')
-NPK2=$($WALLET account get --keys --account-id $MEMBER2 2>&1 | grep 'With npk' | awk '{print $3}')
-NPK3=$($WALLET account get --keys --account-id $MEMBER3 2>&1 | grep 'With npk' | awk '{print $3}')
+NPK1=$($WALLET account get --keys --account-id $MEMBER1 2>&1 | grep '^npk' | awk '{print $2}')
+NPK2=$($WALLET account get --keys --account-id $MEMBER2 2>&1 | grep '^npk' | awk '{print $2}')
+NPK3=$($WALLET account get --keys --account-id $MEMBER3 2>&1 | grep '^npk' | awk '{print $2}')
 
 echo "  Member 1: $MEMBER1 -> NPK=${NPK1:0:16}..."
 echo "  Member 2: $MEMBER2 -> NPK=${NPK2:0:16}..."
