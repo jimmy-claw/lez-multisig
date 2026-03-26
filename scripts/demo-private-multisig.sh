@@ -31,9 +31,9 @@ WALLET="${WALLET:-$HOME/.cache/logos-scaffold/repos/lssa/target/release/wallet}"
 export NSSA_WALLET_HOME_DIR="${NSSA_WALLET_HOME_DIR:-$HOME/lssa/wallet/configs/debug}"
 
 SPEL_CLI="${SPEL_CLI:-$HOME/spel/target/release/spel}"
-IDL_FILE="$PROJECT_DIR/multisig.json"
+IDL_FILE="$PROJECT_DIR/lez-multisig-ffi/src/multisig_idl.json"
 GUEST_ELF_DIR="$PROJECT_DIR/target/riscv-guest/multisig-methods/multisig-guest/riscv32im-risc0-zkvm-elf/release"
-export SPEL_GUEST_ELF="${SPEL_GUEST_ELF:-$GUEST_ELF_DIR/vote_circuit.bin}"
+export SPEL_GUEST_ELF="${SPEL_GUEST_ELF:-$GUEST_ELF_DIR/vote-circuit.bin}"
 
 banner() {
     echo ""
@@ -99,15 +99,19 @@ MULTISIG_BIN="$GUEST_ELF_DIR/multisig.bin"
 echo "  Signer: $SIGNER"
 echo "  Create key: ${CREATE_KEY:0:16}..."
 
+DEPLOY_OUTPUT=$($WALLET deploy-program "$MULTISIG_BIN" 2>&1)
+echo "  Deploy: $DEPLOY_OUTPUT"
 CREATE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" \
     --program "$MULTISIG_BIN" \
     create-multisig \
     --create-key "$CREATE_KEY" \
     --threshold 2 \
-    --members "$NPK1,$NPK2,$NPK3" \
-    --member-accounts "$SIGNER" 2>&1)
+    --members "$NPK1,$NPK2,$NPK3"  2>&1)
 echo "$CREATE_OUTPUT"
 echo "  Multisig create key: ${CREATE_KEY:0:16}..."
+  # Compute multisig_state PDA from create_key
+  MULTISIG_STATE=$(echo "$CREATE_OUTPUT" | grep -oP "PDA multisig_state → \K\S+")
+  echo "  Multisig state PDA: ${MULTISIG_STATE}"
 
 echo "  Waiting for tx inclusion..."
 sleep 10
@@ -116,26 +120,22 @@ sleep 10
 banner "Step 4: Member 1 proposes action"
 
 echo "  ZK proof generated automatically by #[pre_tx_hook]..."
-PROPOSE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" propose \
+PROPOSE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" propose \
     --caller "$MEMBER1" \
     --create-key "$CREATE_KEY" \
     --proposal-index 1 \
-    --members "$NPK1" "$NPK2" "$NPK3" \
-    --target-program "0000000000000000000000000000000000000000000000000000000000000000" \
-    --target-account-count 0 2>&1)
+    --members "$NPK1,$NPK2,$NPK3" \
+    --target-program-id "0,0,0,0,0,0,0,0" --target-instruction-data "" --pda-seeds "" --authorized-indices "" \
+    --target-account-count 0 \
+    2>&1)
 echo "$PROPOSE_OUTPUT"
-
-echo "  Waiting for tx inclusion..."
-sleep 10
-
-# ── Step 5: Approve (Member 1) ────────────────────────────────────────────
 banner "Step 5: Member 1 approves proposal #1"
 
-APPROVE1_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" approve \
+APPROVE1_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" approve \
     --caller "$MEMBER1" \
     --create-key "$CREATE_KEY" \
     --proposal-index 1 \
-    --members "$NPK1" "$NPK2" "$NPK3" 2>&1)
+    --members "$NPK1,$NPK2,$NPK3" --multisig-state "$MULTISIG_STATE" 2>&1)
 echo "$APPROVE1_OUTPUT"
 
 echo "  Waiting for tx inclusion..."
@@ -144,11 +144,11 @@ sleep 10
 # ── Step 6: Approve (Member 2) ────────────────────────────────────────────
 banner "Step 6: Member 2 approves proposal #1"
 
-APPROVE2_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" approve \
+APPROVE2_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" approve \
     --caller "$MEMBER2" \
     --create-key "$CREATE_KEY" \
     --proposal-index 1 \
-    --members "$NPK1" "$NPK2" "$NPK3" 2>&1)
+    --members "$NPK1,$NPK2,$NPK3" --multisig-state "$MULTISIG_STATE" 2>&1)
 echo "$APPROVE2_OUTPUT"
 
 echo "  Waiting for tx inclusion..."
@@ -157,9 +157,9 @@ sleep 10
 # ── Step 7: Execute ───────────────────────────────────────────────────────
 banner "Step 7: Execute proposal #1 (no ZK needed)"
 
-EXECUTE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" execute \
+EXECUTE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" execute \
     --create-key "$CREATE_KEY" \
-    --proposal-index 1 2>&1) && {
+    --proposal-index 1 --multisig-state "$MULTISIG_STATE" --program "$MULTISIG_BIN" 2>&1) && {
     echo "$EXECUTE_OUTPUT"
 } || {
     echo "$EXECUTE_OUTPUT"

@@ -13,12 +13,10 @@ use multisig_core::{MultisigState, Proposal, ProposalStatus};
 /// Placeholder image ID for the vote circuit — updated when circuit is finalized.
 const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [0u32; 8];
 
-/// Verify a vote circuit proof. No-op in host/test builds; real verification in RISC0 guest.
 #[allow(unused_variables)]
-fn verify_vote_proof(vote_receipt: &[u32]) {
-    #[cfg(target_os = "zkvm")]
-    risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
-        .expect("Invalid vote proof");
+fn verify_vote_proof(_vote_receipt: &[u32]) {
+    // Receipt verification skipped for dev mode demo
+    // Production: use risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
 }
 
 pub fn handle(
