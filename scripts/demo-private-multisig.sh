@@ -28,6 +28,7 @@ cd "$PROJECT_DIR"
 # ── Config ─────────────────────────────────────────────────────────────────
 export RISC0_DEV_MODE=1
 SEQUENCER_URL="${SEQUENCER_URL:-http://127.0.0.1:3040}"
+LSSA_DIR="${LSSA_DIR:-$HOME/lssa}"
 WALLET="${WALLET:-$HOME/.cache/logos-scaffold/repos/lssa/target/release/wallet}"
 DEMO_WALLET_DIR="$HOME/lez-multisig/demo-wallet"
 export NSSA_WALLET_HOME_DIR="${NSSA_WALLET_HOME_DIR:-$DEMO_WALLET_DIR}"
@@ -37,7 +38,7 @@ IDL_FILE="$PROJECT_DIR/lez-multisig-ffi/src/multisig_idl.json"
 GUEST_ELF_DIR="$PROJECT_DIR/target/riscv-guest/multisig-methods/multisig-guest/riscv32im-risc0-zkvm-elf/release"
 export SPEL_GUEST_ELF="${SPEL_GUEST_ELF:-$GUEST_ELF_DIR/vote-circuit.bin}"
 MULTISIG_BIN="$GUEST_ELF_DIR/multisig.bin"
-TOKEN_BIN="${TOKEN_BIN:-$HOME/lssa/artifacts/program_methods/token.bin}"
+TOKEN_BIN="${TOKEN_BIN:-$HOME/.cache/logos-scaffold/repos/lssa/artifacts/program_methods/token.bin}"
 TOKEN_IDL="$PROJECT_DIR/scripts/token-idl.json"
 
 source "$HOME/.cargo/env" 2>/dev/null || true
@@ -63,12 +64,7 @@ new_public_account() {
 
 # Compute program ID (comma-separated decimal u32 LE) from binary hash
 program_id_decimal() {
-    python3 -c "
-import hashlib, struct
-with open('$1', 'rb') as f:
-    h = hashlib.sha256(f.read()).digest()
-print(','.join(str(x) for x in struct.unpack('<8I', h)))
-"
+    "$SPEL_CLI" inspect "$1" 2>&1 | grep "ProgramId (decimal)" | awk '{print $NF}'
 }
 
 # ── Step 0: Check prerequisites ───────────────────────────────────────────
@@ -94,39 +90,7 @@ echo "  All prerequisites OK"
 
 # ── Step 1: Build + deploy programs ──────────────────────────────────────
 
-# ── Reset sequencer for clean state ─────────────────────────────────────────
-echo '  Resetting sequencer (clean rocksdb)...'
-source ~/.cargo/env
-cd /tmp/demo-proj
-logos-scaffold localnet stop 2>/dev/null || true
-sleep 2
-rm -rf ~/.cache/logos-scaffold/repos/lssa/rocksdb
-RISC0_DEV_MODE=1 nohup logos-scaffold localnet start > /tmp/sequencer-reset.log 2>&1 &
-echo -n "  Waiting for sequencer"
-for i in $(seq 1 30); do
-    sleep 1; echo -n "."
-    curl -s --max-time 2 "${SEQUENCER_URL}" > /dev/null 2>&1 && break
-done
-echo ""
-curl -s --max-time 3 "${SEQUENCER_URL}" > /dev/null 2>&1 || die "Sequencer failed to start after reset"
-echo '  Sequencer restarted with RISC0_DEV_MODE=1'
-cd -
-
-# Speed up tx confirmation polling
-if command -v python3 &>/dev/null && [ -f "${NSSA_WALLET_HOME_DIR}/wallet_config.json" ]; then
-    python3 -c "
-import json
-p = '${NSSA_WALLET_HOME_DIR}/wallet_config.json'
-with open(p) as f: c = json.load(f)
-c['seq_poll_timeout_millis'] = 3000
-c['seq_tx_poll_max_blocks'] = 30
-c['seq_poll_max_retries'] = 20
-with open(p,'w') as f: json.dump(c, f, indent=4)
-print('  Wallet poll config patched for faster confirmations')
-"
-fi
-
-# storage.json is preserved — accounts persist across steps
+# Sequencer must be running externally before running this script
 banner "Step 1: Build + deploy programs (multisig + token)"
 
 echo "  Building multisig (release, RISC0_DEV_MODE=1)..."
@@ -143,13 +107,11 @@ echo "  Generating IDL..."
 echo "  Deploying multisig program..."
 echo "demo-pass-$(date +%s)" | "$WALLET" deploy-program "$MULTISIG_BIN" 2>&1 \
     && echo "  Multisig deployed" \
-sleep 8  # wait for deploy txs to land
     || echo "  Multisig already deployed — skipping"
 
 echo "  Deploying token program..."
 echo "demo-pass-$(date +%s)" | "$WALLET" deploy-program "$TOKEN_BIN" 2>&1 \
     && echo "  Token deployed" \
-sleep 8  # wait for deploy txs to land
     || echo "  Token already deployed — skipping"
 
 # Compute program IDs from binary SHA256
