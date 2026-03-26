@@ -75,13 +75,13 @@ echo "  Vote circuit ELF: $SPEL_GUEST_ELF"
 # ── Step 2: Create 3 private member accounts ──────────────────────────────
 banner "Step 2: Create 3 member accounts (private)"
 
-MEMBER1=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+')
-MEMBER2=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+')
-MEMBER3=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+')
+MEMBER1=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+' | head -1)
+MEMBER2=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+' | head -1)
+MEMBER3=$($WALLET account new private 2>&1 | grep -oP 'Private/\S+' | head -1)
 
-NPK1=$($WALLET account npk "$MEMBER1" 2>&1)
-NPK2=$($WALLET account npk "$MEMBER2" 2>&1)
-NPK3=$($WALLET account npk "$MEMBER3" 2>&1)
+NPK1=$($WALLET account get --keys --account-id $MEMBER1 2>&1 | grep 'With npk' | awk '{print $3}')
+NPK2=$($WALLET account get --keys --account-id $MEMBER2 2>&1 | grep 'With npk' | awk '{print $3}')
+NPK3=$($WALLET account get --keys --account-id $MEMBER3 2>&1 | grep 'With npk' | awk '{print $3}')
 
 echo "  Member 1: $MEMBER1 -> NPK=${NPK1:0:16}..."
 echo "  Member 2: $MEMBER2 -> NPK=${NPK2:0:16}..."
