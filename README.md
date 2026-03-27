@@ -190,6 +190,7 @@ The multisig can govern **any LEZ program** via ChainedCall. The proposal stores
 
 This means you can use lez-cli with any program's IDL to generate the instruction bytes, then wrap them in a multisig proposal — without writing any code.
 
+
 ## Known Issues
 
 - [ ] No `CloseProposal` instruction yet (executed/rejected proposals stay on-chain)
