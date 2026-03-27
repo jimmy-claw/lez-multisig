@@ -29,7 +29,7 @@ cd "$PROJECT_DIR"
 export RISC0_DEV_MODE=1
 SEQUENCER_URL="${SEQUENCER_URL:-http://127.0.0.1:3040}"
 LSSA_DIR="${LSSA_DIR:-$HOME/lssa}"
-WALLET="${WALLET:-$HOME/.cache/logos-scaffold/repos/lssa/target/release/wallet}"
+WALLET="${WALLET:-$(which wallet 2>/dev/null || echo $HOME/.cargo/bin/wallet)}"
 DEMO_WALLET_DIR="$HOME/lez-multisig/demo-wallet"
 export NSSA_WALLET_HOME_DIR="${NSSA_WALLET_HOME_DIR:-$DEMO_WALLET_DIR}"
 
