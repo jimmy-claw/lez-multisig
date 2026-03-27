@@ -6,17 +6,18 @@
 // - accounts[0]: multisig_state PDA (read membership)
 // - accounts[1]: proposal PDA account (owned by multisig program)
 
+use risc0_zkvm;
 use nssa_core::account::AccountWithMetadata;
 use nssa_core::program::{AccountPostState, ChainedCall};
 use multisig_core::{MultisigState, Proposal, ProposalStatus};
 
-/// Placeholder image ID for the vote circuit — updated when circuit is finalized.
-const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [0u32; 8];
+/// Image ID of the vote_circuit guest binary.
+/// Regenerated on every guest build — must match the ELF used by multisig_client.
+const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [1150173981, 222251152, 3783135603, 1086066461, 3020373532, 1636875796, 2109000309, 3783786054];
 
-#[allow(unused_variables)]
-fn verify_vote_proof(_vote_receipt: &[u32]) {
-    // Receipt verification skipped for dev mode demo
-    // Production: use risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
+fn verify_vote_proof(vote_receipt: &[u32]) {
+    risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
+        .expect("vote proof verification failed: invalid or mismatched circuit receipt");
 }
 
 pub fn handle(
