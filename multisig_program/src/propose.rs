@@ -13,7 +13,7 @@ use multisig_core::{MultisigState, Proposal};
 
 /// Image ID of the vote_circuit guest binary.
 /// Regenerated on every guest build — must match the ELF used by multisig_client.
-const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [1150173981, 222251152, 3783135603, 1086066461, 3020373532, 1636875796, 2109000309, 3783786054];
+const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [321133409, 2163044778, 2219036531, 1579784259, 3460896551, 2401241098, 3167570721, 3436652568];
 
 fn verify_vote_proof(vote_receipt: &[u32]) {
     risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)

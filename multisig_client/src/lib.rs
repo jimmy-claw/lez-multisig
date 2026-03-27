@@ -62,8 +62,16 @@ impl VoteProver {
         let expected_nullifier = compute_vote_nullifier(nsk, proposal_index, domain);
 
         // Build RISC0 executor environment
+        // Write fields individually — matches #[pre_tx_hook] write order
+        // and guest env::read() calls
         let env = risc0_zkvm::ExecutorEnv::builder()
-            .write(&input)
+            .write(&input.nsk)
+            .map_err(|e| ProverError::Serialization(e.to_string()))?
+            .write(&input.member_npks.iter().map(|npk| npk.0).collect::<Vec<[u8;32]>>())
+            .map_err(|e| ProverError::Serialization(e.to_string()))?
+            .write(&input.proposal_index)
+            .map_err(|e| ProverError::Serialization(e.to_string()))?
+            .write(&input.domain)
             .map_err(|e| ProverError::Serialization(e.to_string()))?
             .build()
             .map_err(|e| ProverError::Prover(e.to_string()))?;
