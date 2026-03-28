@@ -310,12 +310,12 @@ echo "$PROPOSE_OUTPUT"
 echo "  Waiting for tx inclusion..."
 sleep 10
 
-# ── Step 7: Approve by MEMBER1 (ZK proof) ────────────────────────────────
-banner "Step 7: MEMBER1 approves (ZK proof via #[pre_tx_hook])"
+# ── Step 7: Approve by MEMBER2 (ZK proof) ────────────────────────────────
+banner "Step 7: MEMBER2 approves (ZK proof via #[pre_tx_hook])"
 
-echo "  Member 1 casts anonymous ZK vote..."
+echo "  Member 2 casts anonymous ZK vote (proposer already voted)..."
 APPROVE1_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" approve \
-    --caller "$MEMBER1" \
+    --caller "$MEMBER2" \
     --create-key "$CREATE_KEY" \
     --proposal-index 0 \
     --members "$NPK1,$NPK2,$NPK3" \
@@ -325,12 +325,12 @@ echo "$APPROVE1_OUTPUT"
 echo "  Waiting for tx inclusion..."
 sleep 10
 
-# ── Step 8: Approve by MEMBER2 (ZK proof) ────────────────────────────────
-banner "Step 8: MEMBER2 approves (ZK proof via #[pre_tx_hook])"
+# ── Step 8: Approve by MEMBER3 (ZK proof) ────────────────────────────────
+banner "Step 8: MEMBER3 approves (ZK proof via #[pre_tx_hook])"
 
-echo "  Member 2 casts anonymous ZK vote (threshold will be met: 2-of-3)..."
+echo "  Member 3 casts anonymous ZK vote (threshold met: 2-of-3 with proposer)..."
 APPROVE2_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" approve \
-    --caller "$MEMBER2" \
+    --caller "$MEMBER3" \
     --create-key "$CREATE_KEY" \
     --proposal-index 0 \
     --members "$NPK1,$NPK2,$NPK3" \
@@ -373,8 +373,8 @@ echo "    Step 3: Registered private accounts on-chain (auth-transfer init)"
 echo "    Step 4: Created 2-of-3 multisig with those NPKs"
 echo "    Step 5: Created token (1M supply), funded vault (500), serialized transfer"
 echo "    Step 6: Member 1 proposed 200-token transfer (ZK proof via #[pre_tx_hook])"
-echo "    Step 7: Member 1 approved (anonymous ZK vote)"
-echo "    Step 8: Member 2 approved (anonymous ZK vote — threshold met)"
+echo "    Step 7: Member 2 approved (anonymous ZK vote)"
+echo "    Step 8: Member 3 approved (anonymous ZK vote — threshold met)"
 echo "    Step 9: Executed — ChainedCall transferred 200 tokens vault → recipient"
 echo ""
 echo "  Privacy guarantees:"
