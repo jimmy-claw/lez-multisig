@@ -3,8 +3,9 @@
 # LP-0002 Private Multisig — Token Transfer Demo
 #
 # Demonstrates ZK-based private multisig governing a real token transfer:
-#   deploy → create multisig → create token → fund vault →
-#   propose transfer (ZK) → approve ×2 (ZK) → execute (ChainedCall)
+#   deploy → create members → register on-chain → create multisig →
+#   create token → fund vault → propose transfer (ZK) → approve ×2 (ZK) →
+#   execute (ChainedCall)
 #
 # Members prove identity via ZK proofs of NSK knowledge (#[pre_tx_hook]).
 # Only vote nullifiers appear on-chain — voter identity stays private.
@@ -148,8 +149,29 @@ echo "  Member 1: $MEMBER1 -> NPK=${NPK1:0:16}..."
 echo "  Member 2: $MEMBER2 -> NPK=${NPK2:0:16}..."
 echo "  Member 3: $MEMBER3 -> NPK=${NPK3:0:16}..."
 
-# ── Step 3: Create 2-of-3 multisig ───────────────────────────────────────
-banner "Step 3: Create 2-of-3 multisig with 3 NPKs"
+# ── Step 3: Register private accounts on-chain ───────────────────────────
+# Private accounts must be registered via auth-transfer init before they can
+# participate in privacy-preserving transactions. This creates a commitment
+# in the sequencer Merkle tree for each account, which is required for ZK
+# proof generation (the prover needs a valid Merkle path to the account).
+banner "Step 3: Register private accounts on-chain (auth-transfer init)"
+
+echo "  Registering member 1..."
+echo "demo" | $WALLET auth-transfer init --account-id $MEMBER1
+sleep 15
+
+echo "  Registering member 2..."
+echo "demo" | $WALLET auth-transfer init --account-id $MEMBER2
+sleep 15
+
+echo "  Registering member 3..."
+echo "demo" | $WALLET auth-transfer init --account-id $MEMBER3
+sleep 15
+
+echo "  All 3 private accounts registered on-chain"
+
+# ── Step 4: Create 2-of-3 multisig ───────────────────────────────────────
+banner "Step 4: Create 2-of-3 multisig with 3 NPKs"
 
 SIGNER=$($WALLET account list 2>&1 | grep -oP 'Public/[A-Za-z0-9]+' | head -1)
 [ -n "$SIGNER" ] || die "No public signer account found"
@@ -178,11 +200,11 @@ echo "  Multisig state PDA: $MULTISIG_STATE"
 echo "  Waiting for tx inclusion..."
 sleep 10
 
-# ── Step 4: Create token, fund vault, serialize transfer ─────────────────
-banner "Step 4: Create token, fund vault, serialize transfer instruction"
+# ── Step 5: Create token, fund vault, serialize transfer ─────────────────
+banner "Step 5: Create token, fund vault, serialize transfer instruction"
 
-# 4a: Compute vault PDA (SHA256-based seed derivation)
-echo "  4a. Computing vault PDA..."
+# 5a: Compute vault PDA (SHA256-based seed derivation)
+echo "  5a. Computing vault PDA..."
 VAULT_COMPUTED=$(python3 - << 'PYEOF'
 import hashlib, struct, os
 ck = os.environ['CREATE_KEY'].encode()
@@ -205,9 +227,9 @@ read MULTISIG_VAULT_SEED MULTISIG_VAULT_PDA <<< "$VAULT_COMPUTED"
 echo "  Vault seed (hex):   $MULTISIG_VAULT_SEED"
 echo "  Multisig vault PDA: $MULTISIG_VAULT_PDA"
 
-# 4b: Create token accounts + token
+# 5b: Create token accounts + token
 echo ""
-echo "  4b. Creating token (supply=1,000,000)..."
+echo "  5b. Creating token (supply=1,000,000)..."
 TOKEN_DEF=$(new_public_account "token-def-$SUFFIX")
 TOKEN_HOLDING=$(new_public_account "token-hold-$SUFFIX")
 RECIPIENT=$(new_public_account "token-recv-$SUFFIX")
@@ -226,9 +248,9 @@ echo "demo-pass-$(date +%s)" | "$WALLET" token new \
 
 sleep 8
 
-# 4c: Fund multisig vault with 500 tokens
+# 5c: Fund multisig vault with 500 tokens
 echo ""
-echo "  4c. Funding multisig vault (500 tokens)..."
+echo "  5c. Funding multisig vault (500 tokens)..."
 echo "demo-pass-$(date +%s)" | "$WALLET" token send \
     --from   "Public/$TOKEN_HOLDING" \
     --to     "Public/$MULTISIG_VAULT_PDA" \
@@ -238,9 +260,9 @@ echo "demo-pass-$(date +%s)" | "$WALLET" token send \
 
 sleep 8
 
-# 4d: Serialize token Transfer(200) via token-idl.json
+# 5d: Serialize token Transfer(200) via token-idl.json
 echo ""
-echo "  4d. Serializing token::Transfer(200) via token-idl.json..."
+echo "  5d. Serializing token::Transfer(200) via token-idl.json..."
 DRY_RUN_OUT=$($SPEL_CLI \
     --idl     "$TOKEN_IDL" \
     --program "$TOKEN_BIN" \
@@ -265,8 +287,8 @@ print(','.join(str(int(w, 16)) for w in words))
     || die "Failed to serialize transfer instruction — check token-idl.json"
 echo "  Serialized instruction data: $TARGET_INSTRUCTION_DATA"
 
-# ── Step 5: Propose token transfer (MEMBER1, ZK proof) ──────────────────
-banner "Step 5: Propose token transfer (MEMBER1, ZK proof via #[pre_tx_hook])"
+# ── Step 6: Propose token transfer (MEMBER1, ZK proof) ──────────────────
+banner "Step 6: Propose token transfer (MEMBER1, ZK proof via #[pre_tx_hook])"
 
 echo "  Proposing: transfer 200 LEZToken from vault → recipient"
 echo "  ZK proof generated automatically by #[pre_tx_hook]..."
@@ -288,8 +310,8 @@ echo "$PROPOSE_OUTPUT"
 echo "  Waiting for tx inclusion..."
 sleep 10
 
-# ── Step 6: Approve by MEMBER1 (ZK proof) ────────────────────────────────
-banner "Step 6: MEMBER1 approves (ZK proof via #[pre_tx_hook])"
+# ── Step 7: Approve by MEMBER1 (ZK proof) ────────────────────────────────
+banner "Step 7: MEMBER1 approves (ZK proof via #[pre_tx_hook])"
 
 echo "  Member 1 casts anonymous ZK vote..."
 APPROVE1_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" approve \
@@ -303,8 +325,8 @@ echo "$APPROVE1_OUTPUT"
 echo "  Waiting for tx inclusion..."
 sleep 10
 
-# ── Step 7: Approve by MEMBER2 (ZK proof) ────────────────────────────────
-banner "Step 7: MEMBER2 approves (ZK proof via #[pre_tx_hook])"
+# ── Step 8: Approve by MEMBER2 (ZK proof) ────────────────────────────────
+banner "Step 8: MEMBER2 approves (ZK proof via #[pre_tx_hook])"
 
 echo "  Member 2 casts anonymous ZK vote (threshold will be met: 2-of-3)..."
 APPROVE2_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" approve \
@@ -318,8 +340,8 @@ echo "$APPROVE2_OUTPUT"
 echo "  Waiting for tx inclusion..."
 sleep 10
 
-# ── Step 8: Execute (no ZK needed) — ChainedCall fires ──────────────────
-banner "Step 8: Execute proposal (no ZK needed — ChainedCall fires)"
+# ── Step 9: Execute (no ZK needed) — ChainedCall fires ──────────────────
+banner "Step 9: Execute proposal (no ZK needed — ChainedCall fires)"
 
 echo "  Threshold met (2-of-3). Executing token transfer via ChainedCall..."
 EXECUTE_OUTPUT=$($SPEL_CLI --idl "$IDL_FILE" --program "$MULTISIG_BIN" execute \
@@ -347,12 +369,13 @@ echo ""
 echo "  What happened:"
 echo "    Step 1: Deployed multisig + token programs"
 echo "    Step 2: Created 3 private members (NPK-based identity)"
-echo "    Step 3: Created 2-of-3 multisig with those NPKs"
-echo "    Step 4: Created token (1M supply), funded vault (500), serialized transfer"
-echo "    Step 5: Member 1 proposed 200-token transfer (ZK proof via #[pre_tx_hook])"
-echo "    Step 6: Member 1 approved (anonymous ZK vote)"
-echo "    Step 7: Member 2 approved (anonymous ZK vote — threshold met)"
-echo "    Step 8: Executed — ChainedCall transferred 200 tokens vault → recipient"
+echo "    Step 3: Registered private accounts on-chain (auth-transfer init)"
+echo "    Step 4: Created 2-of-3 multisig with those NPKs"
+echo "    Step 5: Created token (1M supply), funded vault (500), serialized transfer"
+echo "    Step 6: Member 1 proposed 200-token transfer (ZK proof via #[pre_tx_hook])"
+echo "    Step 7: Member 1 approved (anonymous ZK vote)"
+echo "    Step 8: Member 2 approved (anonymous ZK vote — threshold met)"
+echo "    Step 9: Executed — ChainedCall transferred 200 tokens vault → recipient"
 echo ""
 echo "  Privacy guarantees:"
 echo "    - NSKs never left the client (ZK witness only)"
