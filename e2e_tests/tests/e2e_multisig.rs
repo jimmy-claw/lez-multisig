@@ -288,7 +288,7 @@ async fn test_multisig_token_transfer() {
     };
     let msg = Message::try_new(
         multisig_program_id,
-        vec![multisig_state_id, m1, proposal_id], // Propose expects 3 accounts now
+        vec![m1, multisig_state_id, proposal_id], // [caller, multisig_state, proposal]
         vec![nonce_m1], // Only signer nonces
         propose_instruction,
     ).unwrap();
@@ -311,7 +311,7 @@ async fn test_multisig_token_transfer() {
     
     let msg = Message::try_new(
         multisig_program_id,
-        vec![multisig_state_id, m2, proposal_id], // Approve expects 3 accounts now
+        vec![m2, multisig_state_id, proposal_id], // [caller, multisig_state, proposal]
         vec![nonce_m2], // Only signer nonces
         Instruction::Approve { create_key, proposal_index: 1 },
     ).unwrap();

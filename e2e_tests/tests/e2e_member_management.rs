@@ -128,7 +128,7 @@ async fn propose_approve_execute_config(
     let nonce = get_nonce(client, proposer_id).await;
     let msg = Message::try_new(
         program_id,
-        vec![multisig_state_id, proposer_id, proposal_pda],
+        vec![proposer_id, multisig_state_id, proposal_pda], // [caller, multisig_state, proposal]
         vec![nonce],
         instruction,
     ).unwrap();
@@ -142,7 +142,7 @@ async fn propose_approve_execute_config(
         let nonce = get_nonce(client, approver_id).await;
         let msg = Message::try_new(
             program_id,
-            vec![multisig_state_id, approver_id, proposal_pda],
+            vec![approver_id, multisig_state_id, proposal_pda], // [caller, multisig_state, proposal]
             vec![nonce],
             Instruction::Approve { create_key: *create_key, proposal_index },
         ).unwrap();
@@ -275,7 +275,7 @@ async fn test_member_management() {
     let nonce = get_nonce(&client, m1).await;
     let msg = Message::try_new(
         program_id,
-        vec![multisig_state_id, m1, proposal_pda],
+        vec![m1, multisig_state_id, proposal_pda], // [caller, multisig_state, proposal]
         vec![nonce],
         Instruction::ProposeRemoveMember { member: *m3.value(), create_key, proposal_index: 4 },
     ).unwrap();
@@ -288,7 +288,7 @@ async fn test_member_management() {
         let nonce = get_nonce(&client, id).await;
         let msg = Message::try_new(
             program_id,
-            vec![multisig_state_id, id, proposal_pda],
+            vec![id, multisig_state_id, proposal_pda], // [caller, multisig_state, proposal]
             vec![nonce],
             Instruction::Approve { create_key, proposal_index: 4 },
         ).unwrap();

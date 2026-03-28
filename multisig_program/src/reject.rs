@@ -1,10 +1,12 @@
 // Reject handler — any member rejects an existing proposal via ZK proof.
 //
-// No signer account needed. Membership is proven by the vote_circuit receipt.
+// caller is a private signer account — its identity is hidden by the privacy circuit.
+// Membership is proven by the vote_circuit receipt.
 //
 // Expected accounts:
-// - accounts[0]: multisig_state PDA (read membership/threshold)
-// - accounts[1]: proposal PDA account (owned by multisig program)
+// - accounts[0]: caller (private signer, returned unchanged)
+// - accounts[1]: multisig_state PDA (read membership/threshold)
+// - accounts[2]: proposal PDA account (owned by multisig program)
 
 use risc0_zkvm;
 use nssa_core::account::AccountWithMetadata;
@@ -26,10 +28,11 @@ pub fn handle(
     vote_receipt: &[u8],
     nullifier: [u8; 32],
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
-    assert!(accounts.len() >= 2, "Reject requires multisig_state + proposal accounts");
+    assert!(accounts.len() >= 3, "Reject requires caller + multisig_state + proposal accounts");
 
-    let multisig_account = &accounts[0];
-    let proposal_account = &accounts[1];
+    let caller_account = &accounts[0];
+    let multisig_account = &accounts[1];
+    let proposal_account = &accounts[2];
 
     // Verify the ZK proof of membership
     verify_vote_proof(vote_receipt);
@@ -64,8 +67,12 @@ pub fn handle(
 
     let multisig_post = multisig_account.account.clone();
 
+    // Return caller unchanged (private account, no data modification)
+    let caller_post = caller_account.account.clone();
+
     (
         vec![
+            AccountPostState::new(caller_post),
             AccountPostState::new(multisig_post),
             AccountPostState::new(proposal_post),
         ],
@@ -119,6 +126,7 @@ mod tests {
         let proposal_data = make_proposal([1u8; 32]);
 
         let accounts = vec![
+            make_account(&[99u8; 32], vec![]),       // caller (private signer)
             make_account(&[10u8; 32], state_data),
             make_account(&[20u8; 32], proposal_data),
         ];
@@ -126,7 +134,8 @@ mod tests {
         let nullifier = [5u8; 32];
         let (post_states, _) = handle(&accounts, 1, &[], nullifier);
 
-        let proposal: Proposal = borsh::from_slice(&Vec::from(post_states[1].account().data.clone())).unwrap();
+        assert_eq!(post_states.len(), 3);
+        let proposal: Proposal = borsh::from_slice(&Vec::from(post_states[2].account().data.clone())).unwrap();
         assert_eq!(proposal.rejected.len(), 1);
         assert_eq!(proposal.approved.len(), 1); // proposer still approved
     }
@@ -138,6 +147,7 @@ mod tests {
         let proposal_data = make_proposal([1u8; 32]);
 
         let accounts = vec![
+            make_account(&[99u8; 32], vec![]),       // caller (private signer)
             make_account(&[10u8; 32], state_data),
             make_account(&[20u8; 32], proposal_data),
         ];
@@ -145,7 +155,8 @@ mod tests {
         let nullifier = [5u8; 32];
         let (post_states, _) = handle(&accounts, 1, &[], nullifier);
 
-        let proposal: Proposal = borsh::from_slice(&Vec::from(post_states[1].account().data.clone())).unwrap();
+        assert_eq!(post_states.len(), 3);
+        let proposal: Proposal = borsh::from_slice(&Vec::from(post_states[2].account().data.clone())).unwrap();
         assert_eq!(proposal.status, ProposalStatus::Rejected);
     }
 }

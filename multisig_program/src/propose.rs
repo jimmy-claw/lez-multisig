@@ -1,11 +1,13 @@
 // Propose handler — creates a new proposal as a separate PDA account.
 //
-// No signer account needed. Membership is proven by the vote_circuit receipt.
+// caller is a private signer account — its identity is hidden by the privacy circuit.
+// Membership is proven by the vote_circuit receipt.
 // The #[pre_tx_hook] macro auto-injects env::verify for the receipt.
 //
 // Expected accounts:
-// - accounts[0]: multisig_state PDA (read membership, increment tx_index)
-// - accounts[1]: proposal PDA account (must be Account::default() = uninitialized)
+// - accounts[0]: caller (private signer, returned unchanged)
+// - accounts[1]: multisig_state PDA (read membership, increment tx_index)
+// - accounts[2]: proposal PDA account (must be Account::default() = uninitialized)
 
 use nssa_core::account::{Account, AccountWithMetadata};
 use nssa_core::program::{AccountPostState, ChainedCall, InstructionData, ProgramId};
@@ -30,10 +32,11 @@ pub fn handle(
     vote_receipt: &[u8],
     nullifier: [u8; 32],
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
-    assert!(accounts.len() >= 2, "Propose requires multisig_state + proposal accounts");
+    assert!(accounts.len() >= 3, "Propose requires caller + multisig_state + proposal accounts");
 
-    let multisig_account = &accounts[0];
-    let proposal_account = &accounts[1];
+    let caller_account = &accounts[0];
+    let multisig_account = &accounts[1];
+    let proposal_account = &accounts[2];
 
     // Proposal account must be uninitialized
     assert!(
@@ -74,8 +77,12 @@ pub fn handle(
     let mut proposal_post = Account::default();
     proposal_post.data = proposal_bytes.try_into().unwrap();
 
+    // Return caller unchanged (private account, no data modification)
+    let caller_post = caller_account.account.clone();
+
     (
         vec![
+            AccountPostState::new(caller_post),
             AccountPostState::new(multisig_post),
             AccountPostState::new_claimed(proposal_post),
         ],
@@ -109,8 +116,9 @@ mod tests {
         let state_data = make_state(2, members.clone());
 
         let accounts = vec![
-            make_account(&[10u8; 32], state_data),  // multisig state
-            make_account(&[20u8; 32], vec![]),       // proposal PDA (uninitialized)
+            make_account(&[99u8; 32], vec![]),       // caller (private signer)
+            make_account(&[10u8; 32], state_data),   // multisig state
+            make_account(&[20u8; 32], vec![]),        // proposal PDA (uninitialized)
         ];
 
         let program_id: ProgramId = [42u32; 8];
@@ -127,17 +135,20 @@ mod tests {
         );
 
         assert!(chained.is_empty());
-        assert_eq!(post_states.len(), 2);
+        assert_eq!(post_states.len(), 3);
+
+        // Caller should be returned unchanged
+        assert_eq!(post_states[0].account().data, accounts[0].account.data);
 
         // Multisig state should have incremented tx index
         let state: MultisigState = borsh::from_slice(
-            &Vec::from(post_states[0].account().data.clone())
+            &Vec::from(post_states[1].account().data.clone())
         ).unwrap();
         assert_eq!(state.transaction_index, 1);
 
         // Proposal should exist with proposer auto-approved (via proposer_nullifier)
         let proposal: Proposal = borsh::from_slice(
-            &Vec::from(post_states[1].account().data.clone())
+            &Vec::from(post_states[2].account().data.clone())
         ).unwrap();
         assert_eq!(proposal.index, 1);
         assert_eq!(proposal.proposer, [0u8; 32]); // identity is private

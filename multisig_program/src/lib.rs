@@ -36,7 +36,7 @@ mod multisig_program {
 
     /// Propose a new transaction.
     /// Membership proven via ZK proof (vote_circuit).
-    /// No signer account — the #[pre_tx_hook] generates and verifies the proof.
+    /// caller is a private signer account — its identity is hidden by the privacy circuit.
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
     #[pre_tx_hook(
@@ -51,6 +51,8 @@ mod multisig_program {
         outputs = [nullifier, vote_receipt]
     )]
     pub fn propose(
+        #[account(signer)]
+        caller: AccountWithMetadata,
         #[account(mut, pda = arg("create_key"))]
         multisig_state: AccountWithMetadata,
         #[account(init, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
@@ -66,7 +68,7 @@ mod multisig_program {
         vote_receipt: Vec<u8>,
         nullifier: [u8; 32],
     ) -> SpelResult {
-        let accounts = vec![multisig_state, proposal];
+        let accounts = vec![caller, multisig_state, proposal];
         let (post_states, chained_calls) = crate::propose::handle(
             &accounts,
             &target_program_id,
@@ -82,6 +84,7 @@ mod multisig_program {
 
     /// Approve an existing proposal.
     /// Membership proven via ZK proof (vote_circuit).
+    /// caller is a private signer account — its identity is hidden by the privacy circuit.
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
     #[pre_tx_hook(
@@ -96,6 +99,8 @@ mod multisig_program {
         outputs = [nullifier, vote_receipt]
     )]
     pub fn approve(
+        #[account(signer)]
+        caller: AccountWithMetadata,
         #[account(mut)]
         multisig_state: AccountWithMetadata,
         #[account(mut, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
@@ -106,7 +111,7 @@ mod multisig_program {
         vote_receipt: Vec<u8>,
         nullifier: [u8; 32],
     ) -> SpelResult {
-        let accounts = vec![multisig_state, proposal];
+        let accounts = vec![caller, multisig_state, proposal];
         let (post_states, chained_calls) =
             crate::approve::handle(&accounts, proposal_index, &vote_receipt, nullifier);
         Ok(SpelOutput { post_states, chained_calls })
@@ -114,6 +119,7 @@ mod multisig_program {
 
     /// Reject an existing proposal.
     /// Membership proven via ZK proof (vote_circuit).
+    /// caller is a private signer account — its identity is hidden by the privacy circuit.
     /// proposal PDA seeds: ["multisig_prop___", create_key, proposal_index]
     #[instruction]
     #[pre_tx_hook(
@@ -128,6 +134,8 @@ mod multisig_program {
         outputs = [nullifier, vote_receipt]
     )]
     pub fn reject(
+        #[account(signer)]
+        caller: AccountWithMetadata,
         #[account(mut)]
         multisig_state: AccountWithMetadata,
         #[account(mut, pda = [literal("multisig_prop___"), arg("create_key"), arg("proposal_index")])]
@@ -138,7 +146,7 @@ mod multisig_program {
         vote_receipt: Vec<u8>,
         nullifier: [u8; 32],
     ) -> SpelResult {
-        let accounts = vec![multisig_state, proposal];
+        let accounts = vec![caller, multisig_state, proposal];
         let (post_states, chained_calls) =
             crate::reject::handle(&accounts, proposal_index, &vote_receipt, nullifier);
         Ok(SpelOutput { post_states, chained_calls })
