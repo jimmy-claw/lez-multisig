@@ -62,8 +62,8 @@ pub enum Instruction {
         proposal_index: u64,
         /// Member NPKs (needed by pre_tx hook for ZK proof)
         members: Vec<[u8; 32]>,
-        /// RISC0 receipt from vote_circuit proving proposer membership
-        vote_receipt: Vec<u32>,
+        /// RISC0 receipt from vote_circuit proving proposer membership (raw journal bytes)
+        vote_receipt: Vec<u8>,
         /// Proposer's vote nullifier (derived via vote_circuit)
         nullifier: [u8; 32],
     },
@@ -76,8 +76,8 @@ pub enum Instruction {
         create_key: [u8; 32],
         /// Member NPKs (needed by pre_tx hook for ZK proof)
         members: Vec<[u8; 32]>,
-        /// RISC0 receipt from vote_circuit proving voter membership
-        vote_receipt: Vec<u32>,
+        /// RISC0 receipt from vote_circuit proving voter membership (raw journal bytes)
+        vote_receipt: Vec<u8>,
         /// Voter's nullifier (prevents double-voting)
         nullifier: [u8; 32],
     },
@@ -90,8 +90,8 @@ pub enum Instruction {
         create_key: [u8; 32],
         /// Member NPKs (needed by pre_tx hook for ZK proof)
         members: Vec<[u8; 32]>,
-        /// RISC0 receipt from vote_circuit proving voter membership
-        vote_receipt: Vec<u32>,
+        /// RISC0 receipt from vote_circuit proving voter membership (raw journal bytes)
+        vote_receipt: Vec<u8>,
         /// Voter's nullifier (prevents double-voting)
         nullifier: [u8; 32],
     },

@@ -41,7 +41,7 @@ impl VoteProver {
         Self { member_npks }
     }
 
-    /// Generate a vote proof. Returns (receipt_words: Vec<u32>, nullifier: [u8;32]).
+    /// Generate a vote proof. Returns (receipt_bytes: Vec<u8>, nullifier: [u8;32]).
     ///
     /// Uses RISC0 to prove NSK membership and compute a domain-separated nullifier.
     /// The NSK is a ZK witness — it never leaves the prover.
@@ -50,7 +50,7 @@ impl VoteProver {
         nsk: &NullifierSecretKey,
         proposal_index: u64,
         domain: &str,
-    ) -> Result<(Vec<u32>, [u8; 32]), ProverError> {
+    ) -> Result<(Vec<u8>, [u8; 32]), ProverError> {
         let input = VoteCircuitInput {
             nsk: *nsk,
             proposal_index,
@@ -92,16 +92,8 @@ impl VoteProver {
             "nullifier mismatch between local computation and ZK circuit"
         );
 
-        // Convert journal bytes to u32 words for on-chain submission
-        let journal_bytes = &receipt.journal.bytes;
-        let vote_receipt: Vec<u32> = journal_bytes
-            .chunks(4)
-            .map(|chunk| {
-                let mut arr = [0u8; 4];
-                arr[..chunk.len()].copy_from_slice(chunk);
-                u32::from_le_bytes(arr)
-            })
-            .collect();
+        // Return raw journal bytes for on-chain env::verify
+        let vote_receipt: Vec<u8> = receipt.journal.bytes.clone();
 
         Ok((vote_receipt, expected_nullifier))
     }

@@ -15,7 +15,7 @@ use multisig_core::{MultisigState, Proposal};
 /// Regenerated on every guest build — must match the ELF used by multisig_client.
 const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [321133409, 2163044778, 2219036531, 1579784259, 3460896551, 2401241098, 3167570721, 3436652568];
 
-fn verify_vote_proof(vote_receipt: &[u32]) {
+fn verify_vote_proof(vote_receipt: &[u8]) {
     risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
         .expect("vote proof verification failed: invalid or mismatched circuit receipt");
 }
@@ -27,7 +27,7 @@ pub fn handle(
     target_account_count: u8,
     pda_seeds: &[[u8; 32]],
     authorized_indices: &[u8],
-    vote_receipt: &[u32],
+    vote_receipt: &[u8],
     nullifier: [u8; 32],
 ) -> (Vec<AccountPostState>, Vec<ChainedCall>) {
     assert!(accounts.len() >= 2, "Propose requires multisig_state + proposal accounts");

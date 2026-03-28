@@ -63,7 +63,7 @@ mod multisig_program {
         create_key: [u8; 32],
         proposal_index: u64,
         members: Vec<[u8; 32]>,
-        vote_receipt: Vec<u32>,
+        vote_receipt: Vec<u8>,
         nullifier: [u8; 32],
     ) -> SpelResult {
         let accounts = vec![multisig_state, proposal];
@@ -103,7 +103,7 @@ mod multisig_program {
         proposal_index: u64,
         create_key: [u8; 32],
         members: Vec<[u8; 32]>,
-        vote_receipt: Vec<u32>,
+        vote_receipt: Vec<u8>,
         nullifier: [u8; 32],
     ) -> SpelResult {
         let accounts = vec![multisig_state, proposal];
@@ -135,7 +135,7 @@ mod multisig_program {
         proposal_index: u64,
         create_key: [u8; 32],
         members: Vec<[u8; 32]>,
-        vote_receipt: Vec<u32>,
+        vote_receipt: Vec<u8>,
         nullifier: [u8; 32],
     ) -> SpelResult {
         let accounts = vec![multisig_state, proposal];
