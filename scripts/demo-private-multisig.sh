@@ -94,7 +94,7 @@ echo "  All prerequisites OK"
 # Sequencer must be running externally before running this script
 banner "Step 1: Build + deploy programs (multisig + token)"
 
-echo "  Building multisig (release, RISC0_DEV_MODE=1)..."
+echo "  Building multisig (release, RISC0_DEV_MODE=${RISC0_DEV_MODE:-0})..."
 cargo build --release 2>&1 | tail -5
 
 [ -f "$MULTISIG_BIN" ] || die "Multisig binary not found after build: $MULTISIG_BIN"
