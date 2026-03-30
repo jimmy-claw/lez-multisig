@@ -2636,7 +2636,7 @@ version = "0.1.0"
 dependencies = [
  "multisig_program",
  "serde_json",
- "spel-framework 0.1.0 (git+https://github.com/jimmy-claw/spel?branch=jimmy%2Fpre-tx-hook)",
+ "spel-framework",
 ]
 
 [[package]]
@@ -3407,7 +3407,7 @@ dependencies = [
  "risc0-zkvm",
  "serde",
  "serde_json",
- "spel-framework 0.1.0",
+ "spel-framework",
  "vote_circuit",
 ]
 
@@ -3446,9 +3446,10 @@ dependencies = [
  "borsh",
  "multisig_core",
  "nssa_core",
+ "risc0-binfmt",
  "risc0-zkvm",
  "serde",
- "spel-framework 0.1.0 (git+https://github.com/jimmy-claw/spel?branch=jimmy%2Fpre-tx-hook)",
+ "spel-framework",
 ]
 
 [[package]]
@@ -5130,7 +5131,7 @@ dependencies = [
  "risc0-zkvm",
  "serde",
  "serde_json",
- "spel-framework-core 0.1.0 (git+https://github.com/jimmy-claw/spel?branch=jimmy%2Fpre-tx-hook)",
+ "spel-framework-core",
  "tokio",
  "wallet",
 ]
@@ -5138,34 +5139,12 @@ dependencies = [
 [[package]]
 name = "spel-framework"
 version = "0.1.0"
-dependencies = [
- "borsh",
- "nssa_core",
- "spel-framework-core 0.1.0",
- "spel-framework-macros 0.1.0",
-]
-
-[[package]]
-name = "spel-framework"
-version = "0.1.0"
 source = "git+https://github.com/jimmy-claw/spel?branch=jimmy%2Fpre-tx-hook#2a7297d1bcf83753b5ba9436aa0bf9d14fed0a64"
 dependencies = [
  "borsh",
  "nssa_core",
- "spel-framework-core 0.1.0 (git+https://github.com/jimmy-claw/spel?branch=jimmy%2Fpre-tx-hook)",
- "spel-framework-macros 0.1.0 (git+https://github.com/jimmy-claw/spel?branch=jimmy%2Fpre-tx-hook)",
-]
-
-[[package]]
-name = "spel-framework-core"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "nssa_core",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
+ "spel-framework-core",
+ "spel-framework-macros",
 ]
 
 [[package]]
@@ -5180,16 +5159,6 @@ dependencies = [
  "sha2",
  "syn 2.0.117",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "spel-framework-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "sha2",
- "syn 2.0.117",
 ]
 
 [[package]]

@@ -3,6 +3,9 @@ name = "multisig_program"
 version = "0.1.0"
 edition = "2024"
 
+[build-dependencies]
+risc0-binfmt = "=3.0.4"
+
 [dependencies]
 multisig_core = { path = "../multisig_core" }
 nssa_core.workspace = true

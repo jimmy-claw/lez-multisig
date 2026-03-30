@@ -13,9 +13,7 @@ use nssa_core::account::{Account, AccountWithMetadata};
 use nssa_core::program::{AccountPostState, ChainedCall, InstructionData, ProgramId};
 use multisig_core::{MultisigState, Proposal};
 
-/// Image ID of the vote_circuit guest binary.
-/// Regenerated on every guest build — must match the ELF used by multisig_client.
-const VOTE_CIRCUIT_IMAGE_ID: [u32; 8] = [321133409, 2163044778, 2219036531, 1579784259, 3460896551, 2401241098, 3167570721, 3436652568];
+include!(concat!(env!("OUT_DIR"), "/image_id.rs"));
 
 fn verify_vote_proof(vote_receipt: &[u8]) {
     risc0_zkvm::guest::env::verify(VOTE_CIRCUIT_IMAGE_ID, vote_receipt)
