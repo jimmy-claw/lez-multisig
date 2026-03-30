@@ -8,5 +8,5 @@ name = "multisig"
 path = "src/bin/multisig.rs"
 
 [dependencies]
-spel = { path = "/home/jimmy/spel/spel-cli" }
+spel = { git = "https://github.com/jimmy-claw/spel", branch = "jimmy/pre-tx-hook" }
 tokio = { version = "1", features = ["full"] }

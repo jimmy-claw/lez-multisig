@@ -24,6 +24,6 @@ borsh = "1.5.7"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [patch."https://github.com/logos-blockchain/lssa.git"]
-nssa_core = { path = "/home/jimmy/lssa/nssa/core" }
-nssa = { path = "/home/jimmy/lssa/nssa" }
-wallet = { path = "/home/jimmy/lssa/wallet" }
+nssa_core = { git = "https://github.com/jimmy-claw/lssa", branch = "jimmy/wallet-zk-helpers" }
+nssa = { git = "https://github.com/jimmy-claw/lssa", branch = "jimmy/wallet-zk-helpers" }
+wallet = { git = "https://github.com/jimmy-claw/lssa", branch = "jimmy/wallet-zk-helpers" }
