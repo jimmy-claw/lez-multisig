@@ -27,11 +27,11 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
 # ── Config ─────────────────────────────────────────────────────────────────
-export RISC0_DEV_MODE=1
+export RISC0_DEV_MODE="${RISC0_DEV_MODE:-0}"
 SEQUENCER_URL="${SEQUENCER_URL:-http://127.0.0.1:3040}"
 LSSA_DIR="${LSSA_DIR:-$HOME/lssa}"
 WALLET="${WALLET:-$(which wallet 2>/dev/null || echo $HOME/.cargo/bin/wallet)}"
-DEMO_WALLET_DIR="$HOME/lez-multisig/demo-wallet"
+DEMO_WALLET_DIR="$(pwd)/demo-wallet"
 export NSSA_WALLET_HOME_DIR="${NSSA_WALLET_HOME_DIR:-$DEMO_WALLET_DIR}"
 
 SPEL_CLI="${SPEL_CLI:-$HOME/spel/target/release/spel}"
